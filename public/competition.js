@@ -87,15 +87,6 @@ function renderInfo() {
     : [el('li', { class: 'empty' }, '尚未設定組別')]));
 }
 
-$('share-btn').addEventListener('click', async () => {
-  const url = `${location.origin}/c/${slug}`;
-  const title = state.comp?.title ?? document.title;
-  try {
-    if (navigator.share) await navigator.share({ title, text: `${title} 報名中！`, url });
-    else { await navigator.clipboard.writeText(url); alert('已複製比賽網址'); }
-  } catch { /* 使用者取消分享 */ }
-});
-
 // ---------- 報名 ----------
 const nameInput = $('name');
 const categorySelect = $('category');

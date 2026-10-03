@@ -1,5 +1,7 @@
 'use strict';
 
+const $home = (id) => document.getElementById(id);
+
 async function load() {
   const list = document.getElementById('list');
   const comps = check(await sb.from('competitions')
@@ -23,6 +25,12 @@ async function load() {
     el('div', { class: 'go' }, c.registration_open ? '查看簡章・報名 →' : '查看簡章・名單 →'),
   )));
 }
+
+applySite().then((site) => {
+  document.title = site.site_name;
+  $home('home-title').textContent = site.home_title;
+  $home('home-intro').replaceChildren(renderMarkdown(site.home_intro));
+});
 
 load().catch((err) => {
   document.getElementById('list').replaceChildren(el('div', { class: 'msg show err' }, `無法載入資料：${err.message}`));

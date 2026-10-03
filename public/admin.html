@@ -13,7 +13,7 @@
 <body class="admin">
   <header class="site">
     <div class="inner">
-      <a class="brand" href="/admin">🧗 管理後台</a>
+      <a class="brand" href="/admin">🧗 <span data-site-name>攀岩比賽</span> · 後台</a>
       <span class="muted" id="me-label"></span>
     </div>
   </header>
@@ -158,7 +158,27 @@
 
       <!-- ===== 帳號 ===== -->
       <section class="view hidden" data-view="account">
-        <div class="section-title"><h2>帳號</h2></div>
+        <div class="section-title"><h2>網站與帳號</h2></div>
+        <form class="card" id="site-form">
+          <h3>網站設定</h3>
+          <div class="form-stack">
+            <div><label for="site-name">網站名稱 <span class="hint">（顯示在每一頁的左上角）</span></label><input id="site-name" required maxlength="40"></div>
+            <div><label for="site-home-title">首頁標題</label><input id="site-home-title" required maxlength="80"></div>
+            <div>
+              <label for="site-home-intro">首頁說明 <span class="hint">（Markdown）</span></label>
+              <textarea id="site-home-intro" maxlength="5000"></textarea>
+            </div>
+            <div>
+              <label for="site-footer">頁尾文字 <span class="hint">（選填，例如主辦單位、聯絡方式；Markdown）</span></label>
+              <textarea id="site-footer" maxlength="2000" placeholder="例：主辦單位：XX 攀岩協會｜聯絡信箱：xxx@example.com"></textarea>
+            </div>
+          </div>
+          <div class="actions">
+            <button type="submit">儲存網站設定</button>
+            <a class="btn secondary" href="/" target="_blank">查看首頁 ↗</a>
+          </div>
+          <div class="msg" id="site-msg"></div>
+        </form>
         <div class="card">
           <h3>我的帳號</h3>
           <p id="my-info"></p>
@@ -193,7 +213,7 @@
     <a href="#regs" data-view="regs"><span class="ic">👥</span>報名</a>
     <a href="#payments" data-view="payments"><span class="ic">💰</span>繳費<span class="dot hidden" id="pending-dot"></span></a>
     <a href="#settings" data-view="settings"><span class="ic">⚙️</span>比賽設定</a>
-    <a href="#account" data-view="account"><span class="ic">👤</span>帳號</a>
+    <a href="#account" data-view="account"><span class="ic">☰</span>更多</a>
   </nav>
 
   <!-- 報名詳細 / 編輯 -->

@@ -120,3 +120,27 @@ async function prepareUpload(file) {
   if (!allowed[ext]) throw new Error('只接受 JPG、PNG、WEBP、HEIC 圖片或 PDF');
   return { blob: file, ext, type: file.type || allowed[ext] };
 }
+
+// ---------- 網站設定（網站名稱、首頁文字、頁尾） ----------
+const SITE_DEFAULTS = { site_name: '攀岩比賽', home_title: '比賽列表', home_intro: '選擇比賽查看簡章、報名與參加人員。', footer_text: '' };
+let sitePromise = null;
+function loadSite() {
+  sitePromise ??= sb.from('site_settings').select('site_name, home_title, home_intro, footer_text').maybeSingle()
+    .then(({ data }) => ({ ...SITE_DEFAULTS, ...(data ?? {}) }))
+    .catch(() => ({ ...SITE_DEFAULTS }));
+  return sitePromise;
+}
+
+// 前台共用：頁首名稱、頁尾（含工作人員登入入口）
+async function applySite() {
+  const site = await loadSite();
+  document.querySelectorAll('[data-site-name]').forEach((n) => { n.textContent = site.site_name; });
+  const footer = el('footer', { class: 'site-footer' },
+    site.footer_text.trim() ? renderMarkdown(site.footer_text) : null,
+    el('div', { class: 'footer-links' },
+      el('span', {}, `© ${new Date().getFullYear()} ${site.site_name}`),
+      el('a', { href: '/admin' }, '工作人員登入')));
+  document.querySelector('footer.site-footer')?.remove();
+  document.body.append(footer);
+  return site;
+}

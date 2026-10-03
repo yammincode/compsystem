@@ -77,6 +77,9 @@ select pg_temp.check((select array_agg(display_name || ':' || payment_status ord
                      '公開名單：匿名 + 未繳費');
 select pg_temp.check((select count(*) from list_public_registrations((select draft from ids))) = 0, '未公開比賽名單看不到');
 
+select pg_temp.check((select site_name from site_settings) = '攀岩比賽', '訪客可讀網站設定');
+do $$ begin update site_settings set site_name = 'hack'; exception when insufficient_privilege then null; end $$;
+select pg_temp.check((select site_name from site_settings) = '攀岩比賽', '訪客不能改網站設定');
 select pg_temp.expect_error('select * from registrations', 'permission denied');
 select pg_temp.expect_error('select * from payments', 'permission denied');
 select pg_temp.expect_error($$insert into categories (competition_id, name) values (1, '駭客組')$$, 'row-level security|permission denied');
@@ -152,6 +155,9 @@ select pg_temp.expect_error($$select user_id_by_email('owner@x.com')$$, 'permiss
 -- ===== 工作人員（staff）=====
 set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003';
 select pg_temp.check(is_admin() and not is_owner() and my_role() = 'staff', 'staff 身分');
+update site_settings set site_name = '台北攀岩聯賽', home_intro = '## 歡迎';
+select pg_temp.check((select site_name from site_settings) = '台北攀岩聯賽', 'staff 可改網站設定');
+select pg_temp.expect_error($$insert into site_settings (id) values (2)$$, 'check|permission denied|row-level security');
 select pg_temp.check((select count(*) from registrations) > 0, 'staff 看得到報名資料');
 select pg_temp.check((select count(*) from list_staff()) = 2, 'staff 看得到工作人員名單');
 insert into competitions (slug, title) values ('staff-made', 'staff 建的比賽');

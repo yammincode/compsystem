@@ -363,3 +363,13 @@ body.admin main { padding-bottom: calc(88px + var(--safe-bottom)); }
   .bottom-nav .dot { position: static; margin-left: auto; }
   .admin-top { margin: -24px -24px 16px; padding: 12px 24px; }
 }
+
+/* ---------- 頁尾 ---------- */
+.site-footer {
+  max-width: 960px; margin: 0 auto; padding: 8px 16px 32px;
+  color: var(--muted); font-size: .88rem;
+}
+.site-footer .prose { margin-bottom: 12px; }
+.site-footer .footer-links { display: flex; gap: 12px; justify-content: space-between; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 12px; }
+.site-footer a { color: var(--muted); }
+body.has-cta .site-footer { padding-bottom: calc(96px + var(--safe-bottom)); }

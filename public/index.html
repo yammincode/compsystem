@@ -13,16 +13,18 @@
 <body>
   <header class="site">
     <div class="inner">
-      <a class="brand" href="/">🧗 攀岩比賽</a>
+      <a class="brand" href="/">🧗 <span data-site-name>攀岩比賽</span></a>
     </div>
   </header>
 
   <main>
-    <h1>比賽列表</h1>
-    <p class="lead">選擇比賽查看簡章、報名與參加人員。</p>
+    <h1 id="home-title"></h1>
+    <div class="lead" id="home-intro"></div>
     <div class="comp-list" id="list"><p class="preview">載入中…</p></div>
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/marked@18.0.14/lib/marked.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.4.16/dist/purify.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
   <script src="/config.js"></script>
   <script src="/common.js"></script>

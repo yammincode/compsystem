@@ -540,8 +540,35 @@ async function staffApi(body) {
   return out;
 }
 
+// ---------- 網站設定 ----------
+async function loadSiteForm() {
+  const site = await loadSite();
+  $('site-name').value = site.site_name;
+  $('site-home-title').value = site.home_title;
+  $('site-home-intro').value = site.home_intro;
+  $('site-footer').value = site.footer_text;
+}
+
+$('site-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  guard($('site-msg'), async () => {
+    const row = {
+      site_name: $('site-name').value.trim(),
+      home_title: $('site-home-title').value.trim(),
+      home_intro: $('site-home-intro').value.trim(),
+      footer_text: $('site-footer').value.trim(),
+      updated_at: new Date().toISOString(),
+    };
+    check(await sb.from('site_settings').update(row).eq('id', 1).select('id').single());
+    sitePromise = null;
+    document.querySelectorAll('[data-site-name]').forEach((n) => { n.textContent = row.site_name; });
+    showMsg($('site-msg'), '已儲存網站設定', 'ok');
+  });
+});
+
 async function loadStaff() {
   if (!state.user) return;
+  loadSiteForm();
   $('my-info').replaceChildren(el('strong', {}, state.user.email), '　', el('span', { class: 'badge' }, ROLE_LABEL[state.role]));
   document.querySelectorAll('.owner-only').forEach((x) => x.classList.toggle('hidden', !isOwner()));
   await guard($('staff-msg'), async () => {
@@ -684,6 +711,11 @@ function showLogin() {
   $('login-view').classList.remove('hidden');
   $('me-label').textContent = '';
 }
+
+loadSite().then((site) => {
+  document.querySelectorAll('[data-site-name]').forEach((n) => { n.textContent = site.site_name; });
+  document.title = `${site.site_name}｜管理後台`;
+});
 
 async function enterApp(user, role) {
   state.user = user;

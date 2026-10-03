@@ -52,7 +52,7 @@ window.addEventListener('popstate', () => showTab(location.pathname.split('/')[3
 // ---------- 比賽簡章 ----------
 function renderInfo() {
   const c = state.comp;
-  document.title = `${c.title}｜攀岩比賽`;
+  loadSite().then((site) => { document.title = `${c.title}｜${site.site_name}`; });
   $('comp-title').textContent = c.title;
   $('comp-meta').replaceChildren(...[
     c.is_published ? null : el('span', { class: 'badge full' }, '未公開（僅工作人員可見）'),
@@ -286,6 +286,7 @@ async function load() {
   return true;
 }
 
+applySite();
 load()
   .then((ok) => { if (ok) showTab(tabFromUrl || 'info', false); })
   .catch((err) => {

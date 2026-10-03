@@ -23,8 +23,16 @@
     <section class="card hidden" id="login-view">
       <h2>管理員登入</h2>
       <form id="login-form">
-        <label for="password">密碼</label>
-        <input type="password" id="password" required autocomplete="current-password">
+        <div class="grid">
+          <div>
+            <label for="email">Email</label>
+            <input type="email" id="email" required autocomplete="username">
+          </div>
+          <div>
+            <label for="password">密碼</label>
+            <input type="password" id="password" required autocomplete="current-password">
+          </div>
+        </div>
         <div class="actions"><button type="submit">登入</button></div>
         <div class="msg" id="login-msg"></div>
       </form>
@@ -34,7 +42,7 @@
       <div class="toolbar">
         <h1 style="margin:0">報名管理</h1>
         <span class="spacer"></span>
-        <a class="btn secondary" href="/api/admin/export.csv">匯出 CSV</a>
+        <button class="secondary" id="export-btn">匯出 CSV</button>
         <button class="secondary" id="logout-btn">登出</button>
       </div>
       <p class="lead">此頁面可看到選手真實姓名，請勿外流。</p>
@@ -79,6 +87,8 @@
     </div>
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
+  <script src="/config.js"></script>
   <script src="/common.js"></script>
   <script src="/admin.js"></script>
 </body>

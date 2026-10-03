@@ -3,16 +3,11 @@
 const state = { categories: [], registrations: [], filter: 'all', search: '', editingReg: null };
 const $ = (id) => document.getElementById(id);
 
-function formatTime(utc) {
-  const d = new Date(utc.replace(' ', 'T') + 'Z');
-  return isNaN(d) ? utc : d.toLocaleString('zh-TW', { hour12: false });
-}
-
 async function guard(box, fn) {
   try {
     await fn();
   } catch (err) {
-    if (err.status === 401) return showLogin();
+    if (err.code === '42501' || err.code === 'PGRST301') return showLogin();
     showMsg(box, err.message, 'err');
   }
 }
@@ -36,16 +31,17 @@ function renderCategories() {
       el('td', { class: 'num' }, c.count),
       el('td', {},
         el('button', { class: 'small secondary', onclick: () => guard($('cat-msg'), async () => {
-          await api(`/api/admin/categories/${c.id}`, { method: 'PATCH', body: {
-            name: name.value, description: desc.value, capacity: cap.value,
+          check(await sb.from('categories').update({
+            name: name.value.trim(), description: desc.value.trim(),
+            capacity: cap.value ? Number(cap.value) : null,
             is_open: open.checked, sort_order: Number(sort.value || 0),
-          } });
+          }).eq('id', c.id));
           showMsg($('cat-msg'), `已儲存「${name.value}」`, 'ok');
           await load();
         }) }, '儲存'), ' ',
         el('button', { class: 'small danger', onclick: () => guard($('cat-msg'), async () => {
           if (!confirm(`確定刪除組別「${c.name}」？`)) return;
-          await api(`/api/admin/categories/${c.id}`, { method: 'DELETE' });
+          check(await sb.from('categories').delete().eq('id', c.id));
           showMsg($('cat-msg'), `已刪除「${c.name}」`, 'ok');
           await load();
         }) }, '刪除'),
@@ -57,10 +53,11 @@ function renderCategories() {
 $('cat-form').addEventListener('submit', (e) => {
   e.preventDefault();
   guard($('cat-msg'), async () => {
-    await api('/api/admin/categories', { method: 'POST', body: {
-      name: $('cat-name').value, description: $('cat-desc').value,
-      capacity: $('cat-cap').value, sort_order: Number($('cat-sort').value || 0), is_open: true,
-    } });
+    check(await sb.from('categories').insert({
+      name: $('cat-name').value.trim(), description: $('cat-desc').value.trim(),
+      capacity: $('cat-cap').value ? Number($('cat-cap').value) : null,
+      sort_order: Number($('cat-sort').value || 0), is_open: true,
+    }));
     showMsg($('cat-msg'), `已新增「${$('cat-name').value}」`, 'ok');
     e.target.reset();
     await load();
@@ -92,8 +89,10 @@ function regRow(r, i) {
       el('td', {}, formatTime(r.created_at)),
       el('td', {},
         el('button', { class: 'small', onclick: () => guard($('reg-msg'), async () => {
-          await api(`/api/admin/registrations/${r.id}`, { method: 'PATCH',
-            body: { name: name.value, team: team.value, category_id: cat.value } });
+          if (!name.value.trim()) throw new Error('請填寫姓名');
+          check(await sb.from('registrations').update({
+            name: name.value.trim(), team: team.value.trim(), category_id: Number(cat.value),
+          }).eq('id', r.id));
           state.editingReg = null;
           showMsg($('reg-msg'), '已更新報名資料', 'ok');
           await load();
@@ -113,7 +112,7 @@ function regRow(r, i) {
       el('button', { class: 'small secondary', onclick: () => { state.editingReg = r.id; renderRegistrations(); } }, '編輯'), ' ',
       el('button', { class: 'small danger', onclick: () => guard($('reg-msg'), async () => {
         if (!confirm(`確定刪除 ${r.name}（${r.category_name}）的報名？`)) return;
-        await api(`/api/admin/registrations/${r.id}`, { method: 'DELETE' });
+        check(await sb.from('registrations').delete().eq('id', r.id));
         showMsg($('reg-msg'), `已刪除 ${r.name} 的報名`, 'ok');
         await load();
       }) }, '刪除'),
@@ -139,11 +138,20 @@ $('search').addEventListener('input', (e) => { state.search = e.target.value; re
 // ---------- 登入 / 載入 ----------
 async function load() {
   const [categories, registrations] = await Promise.all([
-    api('/api/admin/categories'),
-    api('/api/admin/registrations'),
+    sb.rpc('list_categories').then(check),
+    sb.from('registrations')
+      .select('id, name, team, category_id, created_at, categories(name, sort_order)')
+      .then(check),
   ]);
   state.categories = categories;
-  state.registrations = registrations;
+  state.registrations = registrations
+    .map((r) => ({
+      ...r,
+      category_name: r.categories?.name ?? '',
+      sort: r.categories?.sort_order ?? 0,
+      display_name: anonymizeName(r.name),
+    }))
+    .sort((a, b) => a.sort - b.sort || a.category_id - b.category_id || a.id - b.id);
   if (state.filter !== 'all' && !categories.some((c) => String(c.id) === state.filter)) state.filter = 'all';
   renderCategories();
   renderTabs();
@@ -165,18 +173,48 @@ async function showAdmin() {
 $('login-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {
-    await api('/api/admin/login', { method: 'POST', body: { password: $('password').value } });
+    check(await sb.auth.signInWithPassword({ email: $('email').value, password: $('password').value }));
     $('password').value = '';
+    if (!check(await sb.rpc('is_admin'))) {
+      await sb.auth.signOut();
+      throw new Error('這個帳號不是管理員');
+    }
     $('login-msg').className = 'msg';
     await showAdmin();
   } catch (err) {
+    if (/Invalid login/i.test(err.message)) err.message = 'Email 或密碼錯誤';
     showMsg($('login-msg'), err.message, 'err');
   }
 });
 
 $('logout-btn').addEventListener('click', async () => {
-  await api('/api/admin/logout', { method: 'POST' }).catch(() => {});
+  await sb.auth.signOut().catch(() => {});
   showLogin();
 });
 
-api('/api/admin/me').then(({ admin }) => (admin ? showAdmin() : showLogin())).catch(showLogin);
+// ---------- 匯出 CSV ----------
+function csvCell(v) {
+  let s = String(v ?? '');
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; // 防止 CSV 公式注入
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+$('export-btn').addEventListener('click', () => {
+  const rows = [['編號', '組別', '姓名', '匿名顯示', '所屬團體', '報名時間']];
+  for (const r of state.registrations) {
+    rows.push([r.id, r.category_name, r.name, r.display_name, r.team, formatTime(r.created_at)]);
+  }
+  const csv = '\uFEFF' + rows.map((row) => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
+  const a = el('a', {
+    href: URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })),
+    download: `報名名單-${new Date().toISOString().slice(0, 10)}.csv`,
+  });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+
+(async () => {
+  const { data } = await sb.auth.getSession();
+  if (data.session && (await sb.rpc('is_admin')).data) showAdmin();
+  else showLogin();
+})().catch(showLogin);

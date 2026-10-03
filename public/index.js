@@ -60,8 +60,8 @@ function renderList() {
 
 async function load() {
   const [categories, registrations] = await Promise.all([
-    api('/api/categories'),
-    api('/api/registrations'),
+    sb.rpc('list_categories').then(check),
+    sb.rpc('list_public_registrations').then(check),
   ]);
   state.categories = categories;
   state.registrations = registrations;
@@ -86,12 +86,12 @@ form.addEventListener('submit', async (e) => {
   submitBtn.disabled = true;
   formMsg.className = 'msg';
   try {
-    const result = await api('/api/registrations', {
-      method: 'POST',
-      body: { name: nameInput.value, team: teamInput.value, category_id: categorySelect.value },
-    });
+    if (!categorySelect.value) throw new Error('請選擇組別');
+    const displayName = check(await sb.rpc('register', {
+      p_name: nameInput.value, p_team: teamInput.value, p_category_id: Number(categorySelect.value),
+    }));
     const cat = categorySelect.options[categorySelect.selectedIndex]?.text ?? '';
-    showMsg(formMsg, `報名成功！${result.display_name} 已加入「${cat}」。`, 'ok');
+    showMsg(formMsg, `報名成功！${displayName} 已加入「${cat}」。`, 'ok');
     nameInput.value = '';
     preview.replaceChildren();
     await load();

@@ -2,6 +2,10 @@
   publish = "public"
   command = "npm run build"
 
+[build.environment]
+  # SUPABASE_URL 與 anon/publishable key 本來就是公開值（會出現在前端），不需要被當成祕密掃描
+  SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL,SUPABASE_ANON_KEY"
+
 [[headers]]
   for = "/*"
   [headers.values]

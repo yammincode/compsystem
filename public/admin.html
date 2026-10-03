@@ -2,165 +2,251 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="robots" content="noindex">
-  <title>比賽管理</title>
+  <meta name="theme-color" content="#d9480f">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icon.svg">
+  <title>比賽管理後台</title>
   <link rel="stylesheet" href="/style.css">
 </head>
-<body>
+<body class="admin">
   <header class="site">
     <div class="inner">
-      <a class="brand" href="/" style="color:inherit;text-decoration:none">🧗 攀岩比賽 · 管理</a>
-      <nav>
-        <a href="/">比賽列表</a>
-        <a href="/admin" class="active">管理</a>
-      </nav>
+      <a class="brand" href="/admin">🧗 管理後台</a>
+      <span class="muted" id="me-label"></span>
     </div>
   </header>
 
   <main>
-    <section class="card hidden" id="login-view">
-      <h2>管理員登入</h2>
+    <!-- 登入 -->
+    <section class="card hidden" id="login-view" style="max-width:420px;margin:24px auto">
+      <h2>工作人員登入</h2>
       <form id="login-form">
-        <div class="grid">
+        <div class="form-stack">
           <div>
             <label for="email">Email</label>
-            <input type="email" id="email" required autocomplete="username">
+            <input type="email" id="email" required autocomplete="username" inputmode="email">
           </div>
           <div>
             <label for="password">密碼</label>
             <input type="password" id="password" required autocomplete="current-password">
           </div>
         </div>
-        <div class="actions"><button type="submit">登入</button></div>
+        <button type="submit" class="block">登入</button>
         <div class="msg" id="login-msg"></div>
       </form>
+      <p class="preview" style="margin-top:16px">忘記密碼請聯絡管理員重設。</p>
     </section>
 
-    <div class="hidden" id="admin-view">
-      <div class="toolbar">
-        <h1 style="margin:0">比賽管理</h1>
-        <span class="spacer"></span>
-        <button class="secondary" id="logout-btn">登出</button>
-      </div>
-      <p class="lead">此頁面可看到選手真實姓名與匯款資料，請勿外流。</p>
-
-      <div class="admin-bar">
-        <label for="comp-select" style="margin:0">目前比賽</label>
-        <select id="comp-select"></select>
-        <button class="secondary" id="new-comp-btn">＋ 新增比賽</button>
-        <a class="btn secondary" id="view-comp-link" target="_blank">查看比賽頁 ↗</a>
+    <div class="hidden" id="app">
+      <div class="admin-top">
+        <select id="comp-select" aria-label="選擇比賽"></select>
+        <button class="secondary small" id="new-comp-btn" title="新增比賽">＋ 新比賽</button>
       </div>
       <div class="msg" id="top-msg"></div>
 
-      <!-- 比賽設定 -->
-      <section class="card">
-        <h2 id="comp-form-title">比賽設定</h2>
-        <form id="comp-form">
+      <!-- ===== 總覽 ===== -->
+      <section class="view hidden" data-view="dashboard">
+        <div class="section-title">
+          <h2 id="dash-title">總覽</h2>
+          <a class="btn secondary small" id="view-site-link" target="_blank">前台 ↗</a>
+        </div>
+        <div class="stats" id="stats"></div>
+        <div class="card">
+          <h3>各組報名狀況</h3>
+          <div id="cat-stats"></div>
+        </div>
+        <div class="card">
+          <div class="section-title"><h3 style="flex:1;margin:0">最新報名</h3><a class="btn ghost small" href="#regs">全部 →</a></div>
+          <div id="recent"></div>
+        </div>
+        <div class="card">
+          <h3>比賽網址</h3>
+          <div class="copy-row">
+            <input id="site-url" readonly>
+            <button class="secondary small" id="copy-url-btn">複製</button>
+          </div>
+          <p class="preview">把這個網址傳給選手就能報名。</p>
+        </div>
+      </section>
+
+      <!-- ===== 報名 ===== -->
+      <section class="view hidden" data-view="regs">
+        <div class="section-title">
+          <h2>報名名單</h2>
+          <button class="small" id="add-reg-btn">＋ 代為報名</button>
+        </div>
+        <div class="card">
+          <div class="seg" id="pay-seg" style="margin-bottom:12px"></div>
+          <div class="tabs" id="cat-tabs"></div>
+          <div class="toolbar">
+            <input type="search" id="search" placeholder="🔍 搜尋姓名或團體">
+            <button class="secondary small" id="export-btn">匯出 CSV</button>
+          </div>
+          <div class="muted" id="reg-total" style="margin-bottom:4px"></div>
+          <div id="reg-list"></div>
+        </div>
+      </section>
+
+      <!-- ===== 繳費審核 ===== -->
+      <section class="view hidden" data-view="payments">
+        <div class="section-title"><h2>繳費審核</h2></div>
+        <div class="seg" id="payview-seg" style="margin-bottom:12px">
+          <button type="button" data-v="pending" class="active">待審核</button>
+          <button type="button" data-v="done">已處理</button>
+        </div>
+        <div class="msg" id="pay-msg"></div>
+        <div id="payment-list"></div>
+      </section>
+
+      <!-- ===== 比賽設定 ===== -->
+      <section class="view hidden" data-view="settings">
+        <div class="section-title"><h2 id="comp-form-title">比賽設定</h2></div>
+        <form class="card" id="comp-form">
           <div class="grid">
             <div><label for="c-title">比賽名稱</label><input id="c-title" required maxlength="80" placeholder="例：2026 春季抱石賽"></div>
             <div>
               <label for="c-slug">網址代碼 <span class="hint">（英文小寫、數字、-）</span></label>
-              <input id="c-slug" required maxlength="50" pattern="[a-z0-9]([a-z0-9\-]*[a-z0-9])?" placeholder="例：2026-spring">
+              <input id="c-slug" required maxlength="50" pattern="[a-z0-9]([a-z0-9\-]*[a-z0-9])?" placeholder="例：2026-spring" autocapitalize="off">
               <div class="field-hint" id="c-slug-hint"></div>
             </div>
             <div><label for="c-date">比賽日期</label><input id="c-date" type="date"></div>
             <div><label for="c-location">地點</label><input id="c-location" maxlength="120"></div>
-            <div><label for="c-fee">報名費（元） <span class="hint">（空白 = 未定）</span></label><input id="c-fee" type="number" min="0"></div>
+            <div><label for="c-fee">報名費（元）</label><input id="c-fee" type="number" inputmode="numeric" min="0" placeholder="空白 = 未定"></div>
           </div>
-          <div class="check-row" style="margin-top:16px">
+          <div class="check-row" style="margin-top:12px">
             <label><input type="checkbox" id="c-published"> 公開（出現在比賽列表）</label>
             <label><input type="checkbox" id="c-open" checked> 開放報名</label>
           </div>
-          <div style="margin-top:16px">
-            <label for="c-payment">匯款方式 <span class="hint">（選手填寫繳費資訊時會看到）</span></label>
+          <div style="margin-top:12px">
+            <label for="c-payment">匯款方式 <span class="hint">（選手繳費時會看到）</span></label>
             <textarea id="c-payment" maxlength="2000" placeholder="例：&#10;銀行：XX 銀行（代碼 000）&#10;帳號：0000-0000-0000&#10;戶名：XX 攀岩協會"></textarea>
           </div>
-          <div style="margin-top:16px">
-            <label for="c-brochure">簡章內容 <span class="hint">（支援 Markdown：# 標題、- 清單、**粗體**、[連結](https://...)）</span></label>
+          <div style="margin-top:12px">
+            <label for="c-brochure">簡章內容 <span class="hint">（Markdown：# 標題、- 清單、**粗體**、[連結](https://...)）</span></label>
             <textarea id="c-brochure" class="tall" maxlength="50000"></textarea>
           </div>
           <div class="actions">
-            <button type="submit" id="comp-save-btn">儲存比賽設定</button>
+            <button type="submit" id="comp-save-btn">儲存</button>
             <button type="button" class="secondary" id="brochure-preview-btn">預覽簡章</button>
-            <span class="spacer" style="flex:1"></span>
-            <button type="button" class="danger" id="comp-delete-btn">刪除比賽</button>
           </div>
           <div class="msg" id="comp-msg"></div>
-          <div class="card hidden" id="brochure-preview" style="margin-top:16px"></div>
+          <div class="card hidden" id="brochure-preview" style="margin:16px 0 0"></div>
         </form>
-      </section>
 
-      <div id="comp-detail">
-        <!-- 組別 -->
-        <section class="card">
-          <h2>組別設定</h2>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>排序</th><th>組別名稱</th><th>說明</th><th>人數上限</th><th>開放報名</th><th>已報名</th><th></th></tr></thead>
-              <tbody id="cat-list"></tbody>
-            </table>
-          </div>
-          <h3 style="margin-top:24px">新增組別</h3>
-          <form id="cat-form">
+        <div class="card" id="cat-card">
+          <h3>組別</h3>
+          <div id="cat-list"></div>
+          <form id="cat-form" class="cat-edit" style="border-style:dashed">
             <div class="grid">
-              <div><label for="cat-name">組別名稱</label><input id="cat-name" required maxlength="40" placeholder="例：男子初階組"></div>
+              <div><label for="cat-name">新增組別</label><input id="cat-name" required maxlength="40" placeholder="組別名稱，例：男子初階組"></div>
               <div><label for="cat-desc">說明 <span class="hint">（選填）</span></label><input id="cat-desc" maxlength="200" placeholder="例：攀爬經驗一年以下"></div>
-              <div><label for="cat-cap">人數上限 <span class="hint">（空白 = 不限）</span></label><input id="cat-cap" type="number" min="1"></div>
-              <div><label for="cat-sort">排序</label><input id="cat-sort" type="number" value="0"></div>
+              <div><label for="cat-cap">人數上限 <span class="hint">（空白 = 不限）</span></label><input id="cat-cap" type="number" inputmode="numeric" min="1"></div>
             </div>
-            <div class="actions"><button type="submit">新增組別</button></div>
+            <div class="actions"><button type="submit" class="small">＋ 新增組別</button></div>
           </form>
           <div class="msg" id="cat-msg"></div>
-        </section>
+        </div>
 
-        <!-- 繳費審核 -->
-        <section class="card">
-          <h2>繳費審核 <span class="badge" id="pending-count"></span></h2>
-          <div id="pending-list"></div>
-          <div class="msg" id="pay-msg"></div>
-        </section>
+        <div class="card" id="danger-card">
+          <h3>刪除比賽</h3>
+          <p class="preview">只有管理員可以刪除，而且要先刪除所有報名與組別。一般建議改為「不公開」即可。</p>
+          <button type="button" class="danger" id="comp-delete-btn">刪除這場比賽</button>
+        </div>
+      </section>
 
-        <!-- 報名資料 -->
-        <section class="card">
-          <div class="toolbar">
-            <h2 style="margin:0">報名資料</h2>
-            <span class="spacer"></span>
-            <button class="secondary" id="export-btn">匯出 CSV</button>
+      <!-- ===== 帳號 ===== -->
+      <section class="view hidden" data-view="account">
+        <div class="section-title"><h2>帳號</h2></div>
+        <div class="card">
+          <h3>我的帳號</h3>
+          <p id="my-info"></p>
+          <form id="pw-form">
+            <label for="new-pw">修改密碼</label>
+            <div class="copy-row">
+              <input type="password" id="new-pw" minlength="8" maxlength="72" required autocomplete="new-password" placeholder="新密碼（至少 8 個字元）">
+              <button type="submit" class="secondary small">更新</button>
+            </div>
+          </form>
+          <div class="msg" id="pw-msg"></div>
+          <div class="actions"><button class="danger" id="logout-btn">登出</button></div>
+        </div>
+        <div class="card">
+          <div class="section-title">
+            <h3 style="flex:1;margin:0">工作人員</h3>
+            <button class="small owner-only" id="add-staff-btn">＋ 新增</button>
           </div>
-          <div class="tabs" id="tabs"></div>
-          <div class="toolbar">
-            <input type="search" id="search" placeholder="搜尋姓名或團體">
-            <select id="pay-filter" style="width:auto">
-              <option value="">全部繳費狀態</option>
-              <option value="unpaid">未繳費</option>
-              <option value="pending">審核中</option>
-              <option value="paid">已繳費</option>
-            </select>
-            <span class="spacer"></span>
-            <span class="preview" id="total"></span>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>#</th><th>真實姓名</th><th>公開顯示</th><th>組別</th><th>所屬團體</th><th>繳費</th><th>報名時間</th><th></th></tr></thead>
-              <tbody id="reg-list"></tbody>
-            </table>
-          </div>
-          <div class="msg" id="reg-msg"></div>
-        </section>
-      </div>
+          <p class="preview">
+            <strong>管理員</strong>：全部功能，可管理工作人員、刪除比賽。<br>
+            <strong>工作人員</strong>：修改比賽內容、組別、報名資料、審核繳費。
+          </p>
+          <div id="staff-list"></div>
+          <div class="msg" id="staff-msg"></div>
+        </div>
+      </section>
     </div>
   </main>
 
-  <!-- 繳費紀錄對話框 -->
-  <dialog id="history-dialog">
-    <div class="dlg-body">
+  <nav class="bottom-nav hidden" id="bottom-nav">
+    <a href="#dashboard" data-view="dashboard"><span class="ic">📊</span>總覽</a>
+    <a href="#regs" data-view="regs"><span class="ic">👥</span>報名</a>
+    <a href="#payments" data-view="payments"><span class="ic">💰</span>繳費<span class="dot hidden" id="pending-dot"></span></a>
+    <a href="#settings" data-view="settings"><span class="ic">⚙️</span>比賽設定</a>
+    <a href="#account" data-view="account"><span class="ic">👤</span>帳號</a>
+  </nav>
+
+  <!-- 報名詳細 / 編輯 -->
+  <dialog id="reg-dialog">
+    <form class="dlg-body" id="reg-form" autocomplete="off">
       <div class="dlg-head">
-        <h2 id="history-title">繳費紀錄</h2>
-        <button type="button" class="close" id="history-close" aria-label="關閉">×</button>
+        <h2 id="reg-dlg-title">報名資料</h2>
+        <button type="button" class="close" data-close aria-label="關閉">×</button>
       </div>
-      <div id="history-list"></div>
-    </div>
+      <div class="form-stack">
+        <div><label for="r-name">真實姓名</label><input id="r-name" required maxlength="30"><div class="field-hint" id="r-anon"></div></div>
+        <div><label for="r-cat">組別</label><select id="r-cat" required></select></div>
+        <div><label for="r-team">所屬團體</label><input id="r-team" maxlength="50"></div>
+      </div>
+      <div id="r-pay-block">
+        <label>繳費狀態</label>
+        <div class="seg" id="r-pay-seg"></div>
+        <div class="field-hint">現場收現金可直接改為「已繳費」。</div>
+        <h3 style="margin-top:16px">繳費紀錄</h3>
+        <div id="r-history"></div>
+      </div>
+      <div class="msg" id="reg-msg"></div>
+      <div class="actions">
+        <button type="submit" id="r-save">儲存</button>
+        <span class="spacer"></span>
+        <button type="button" class="danger" id="r-delete">刪除報名</button>
+      </div>
+      <p class="preview" id="r-meta"></p>
+    </form>
+  </dialog>
+
+  <!-- 新增工作人員 -->
+  <dialog id="staff-dialog">
+    <form class="dlg-body" id="staff-form" autocomplete="off">
+      <div class="dlg-head">
+        <h2>新增工作人員</h2>
+        <button type="button" class="close" data-close aria-label="關閉">×</button>
+      </div>
+      <div class="form-stack">
+        <div><label for="s-email">Email</label><input id="s-email" type="email" required inputmode="email" autocomplete="off"></div>
+        <div>
+          <label for="s-pw">初始密碼 <span class="hint">（至少 8 個字元，請轉告對方登入後自行修改）</span></label>
+          <input id="s-pw" minlength="8" maxlength="72" autocomplete="new-password">
+          <div class="field-hint">如果這個 Email 已經有帳號，只會把它加入工作人員，不會改密碼。</div>
+        </div>
+        <div>
+          <label for="s-role">角色</label>
+          <select id="s-role"><option value="staff">工作人員</option><option value="owner">管理員</option></select>
+        </div>
+      </div>
+      <div class="msg" id="s-msg"></div>
+      <div class="actions"><button type="submit" class="block" id="s-submit">新增</button></div>
+    </form>
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/marked@18.0.14/lib/marked.umd.js"></script>

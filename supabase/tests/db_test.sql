@@ -18,7 +18,7 @@ begin
   if not coalesce(ok, false) then raise exception 'FAIL: %', label; end if;
   raise notice 'ok - %', label;
 end $$;
-grant execute on all functions in schema pg_temp to anon, authenticated;
+grant execute on all functions in schema pg_temp to anon, authenticated, service_role;
 set client_min_messages = notice;
 
 -- ===== 第一版資料升級 =====
@@ -33,8 +33,12 @@ select pg_temp.check(anonymize_name('王明') = '王X', '兩個字');
 select pg_temp.check(anonymize_name('歐陽小明') = '歐XX明', '四個字');
 
 -- ===== 測試資料 =====
-insert into auth.users values ('00000000-0000-0000-0000-000000000001'), ('00000000-0000-0000-0000-000000000002');
-insert into admins values ('00000000-0000-0000-0000-000000000001');
+insert into auth.users (id, email) values
+  ('00000000-0000-0000-0000-000000000001', 'owner@x.com'),
+  ('00000000-0000-0000-0000-000000000002', 'user@x.com'),
+  ('00000000-0000-0000-0000-000000000003', 'staff@x.com');
+insert into admins (user_id) values ('00000000-0000-0000-0000-000000000001');
+select pg_temp.check((select role from admins where user_id = '00000000-0000-0000-0000-000000000001') = 'owner', '既有管理員預設為 owner');
 insert into competitions (slug, title, is_published, fee) values ('cup-a', 'A 盃', true, 800);
 insert into competitions (slug, title, is_published) values ('draft', '草稿比賽', false);
 insert into competitions (slug, title, is_published, registration_open) values ('closed', '已截止比賽', true, false);
@@ -134,6 +138,46 @@ update competitions set is_published = true where slug = 'draft';
 select pg_temp.expect_error($$delete from competitions where slug = 'cup-a'$$, 'foreign key');
 delete from registrations where id = (select li from reg);
 select pg_temp.check((select count(*) from payments where registration_id = (select li from reg)) = 0, '刪除報名一併刪除繳費資料');
+
+-- ===== 工作人員管理（owner）=====
+select pg_temp.check(my_role() = 'owner', 'my_role = owner');
+select pg_temp.expect_error($$select add_staff('nobody@x.com')$$, '找不到這個 Email');
+select pg_temp.check(add_staff(' STAFF@x.com ') = '00000000-0000-0000-0000-000000000003', '依 Email 加入工作人員');
+select pg_temp.check((select array_agg(email || ':' || role order by role) from list_staff()) = array['owner@x.com:owner', 'staff@x.com:staff'], '工作人員名單');
+select pg_temp.expect_error($$select remove_staff('00000000-0000-0000-0000-000000000001')$$, '不能移除自己');
+select pg_temp.expect_error($$select set_staff_role('00000000-0000-0000-0000-000000000001', 'staff')$$, '至少要保留一位管理員');
+select pg_temp.check(my_role() = 'owner', '降級失敗後仍是 owner');
+select pg_temp.expect_error($$select user_id_by_email('owner@x.com')$$, 'permission denied');
+
+-- ===== 工作人員（staff）=====
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003';
+select pg_temp.check(is_admin() and not is_owner() and my_role() = 'staff', 'staff 身分');
+select pg_temp.check((select count(*) from registrations) > 0, 'staff 看得到報名資料');
+select pg_temp.check((select count(*) from list_staff()) = 2, 'staff 看得到工作人員名單');
+insert into competitions (slug, title) values ('staff-made', 'staff 建的比賽');
+update competitions set title = 'staff 改的比賽' where slug = 'staff-made';
+select pg_temp.check((select title from competitions where slug = 'staff-made') = 'staff 改的比賽', 'staff 可新增、修改比賽');
+delete from competitions where slug = 'staff-made';
+select pg_temp.check((select count(*) from competitions where slug = 'staff-made') = 1, 'staff 不能刪除比賽');
+select pg_temp.expect_error($$select add_staff('user@x.com')$$, '只有管理員');
+select pg_temp.expect_error($$select remove_staff('00000000-0000-0000-0000-000000000001')$$, '只有管理員');
+select pg_temp.expect_error($$select set_staff_role('00000000-0000-0000-0000-000000000003', 'owner')$$, '只有管理員');
+do $$ begin update admins set role = 'owner'; exception when insufficient_privilege then null; end $$;
+select pg_temp.check(my_role() = 'staff', 'staff 無法直接改自己的角色');
+
+-- owner 移除 staff、刪除比賽
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000001';
+delete from competitions where slug = 'staff-made';
+select pg_temp.check((select count(*) from competitions where slug = 'staff-made') = 0, 'owner 可刪除比賽');
+select remove_staff('00000000-0000-0000-0000-000000000003');
+select pg_temp.check((select count(*) from list_staff()) = 1, 'owner 可移除工作人員');
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003';
+select pg_temp.check(not is_admin() and my_role() is null, '被移除後失去權限');
+reset role;
+
+-- service_role（Netlify Function）可依 Email 查帳號
+set role service_role;
+select pg_temp.check(user_id_by_email('Owner@X.com') = '00000000-0000-0000-0000-000000000001', 'service_role 依 Email 查帳號');
 reset role;
 
 \echo 'ALL TESTS PASSED'

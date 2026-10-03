@@ -9,6 +9,7 @@ const state = {
   comp: null,
   categories: [],
   registrations: [],
+  tab: 'info',
   filter: 'all',
   search: '',
   payTarget: null, // { id, display_name, category_name }
@@ -20,11 +21,20 @@ function tabUrl(tab) {
   return `/c/${slug}${tab === 'info' ? '' : `/${tab}`}`;
 }
 
+function updateCta() {
+  // 手機底部「我要報名」：報名中、且不在報名頁時顯示
+  const show = !!state.comp?.registration_open && state.tab !== 'register';
+  $('cta-bar').classList.toggle('hidden', !show);
+  document.body.classList.toggle('has-cta', show);
+}
+
 function showTab(tab, push = true) {
   if (!TABS.includes(tab)) tab = 'info';
+  state.tab = tab;
   document.querySelectorAll('section.tab').forEach((s) => s.classList.toggle('hidden', s.dataset.tab !== tab));
   document.querySelectorAll('#subnav a').forEach((a) => a.classList.toggle('active', a.dataset.tab === tab));
   if (push && location.pathname !== tabUrl(tab)) history.pushState({ tab }, '', tabUrl(tab));
+  updateCta();
 }
 
 document.querySelectorAll('#subnav a, [data-goto]').forEach((a) => {
@@ -45,19 +55,20 @@ function renderInfo() {
   document.title = `${c.title}｜攀岩比賽`;
   $('comp-title').textContent = c.title;
   $('comp-meta').replaceChildren(...[
-    c.is_published ? null : el('span', { class: 'badge full' }, '未公開（僅管理員可見）'),
+    c.is_published ? null : el('span', { class: 'badge full' }, '未公開（僅工作人員可見）'),
+    c.registration_open ? el('span', { class: 'badge' }, '報名中') : el('span', { class: 'badge closed' }, '報名截止'),
     c.event_date ? el('span', {}, `📅 ${formatDate(c.event_date)}`) : null,
     c.location ? el('span', {}, `📍 ${c.location}`) : null,
-    c.registration_open ? el('span', { class: 'badge' }, '報名中') : el('span', { class: 'badge closed' }, '報名截止'),
   ].filter(Boolean));
 
-  const item = (label, value) => (value ? el('div', { class: 'item' },
-    el('div', { class: 'label' }, label), el('div', { class: 'value' }, value)) : null);
+  const item = (label, value) => el('div', { class: 'item' },
+    el('div', { class: 'label' }, label), el('div', { class: 'value' }, value));
+  const paid = state.registrations.filter((r) => r.payment_status === 'paid').length;
   $('info-grid').replaceChildren(
     item('比賽日期', formatDate(c.event_date) || '未定'),
     item('地點', c.location || '未定'),
     item('報名費', c.fee != null ? formatMoney(c.fee) : '未定'),
-    item('報名人數', `${state.registrations.length} 人`),
+    item('報名人數', `${state.registrations.length} 人（已繳費 ${paid}）`),
   );
 
   $('brochure-card').classList.toggle('hidden', !c.brochure.trim());
@@ -66,14 +77,24 @@ function renderInfo() {
   $('info-cats').replaceChildren(...(state.categories.length
     ? state.categories.map((cat) => {
       const s = categoryStatus(cat, c.registration_open);
-      return el('tr', {},
-        el('td', {}, cat.name),
-        el('td', { style: 'white-space:normal' }, cat.description || '—'),
-        el('td', {}, cat.capacity != null ? `${cat.count} / ${cat.capacity}` : `${cat.count} 人`),
-        el('td', {}, el('span', { class: `badge ${s.cls}` }, s.text)));
+      return el('li', {},
+        el('div', { class: 'who' },
+          el('div', { style: 'font-weight:600' }, cat.name),
+          cat.description ? el('div', { class: 'muted' }, cat.description) : null),
+        el('span', { class: 'muted' }, cat.capacity != null ? `${cat.count}/${cat.capacity}` : `${cat.count} 人`),
+        el('span', { class: `badge ${s.cls}` }, s.text));
     })
-    : [el('tr', {}, el('td', { colspan: 4, class: 'empty' }, '尚未設定組別'))]));
+    : [el('li', { class: 'empty' }, '尚未設定組別')]));
 }
+
+$('share-btn').addEventListener('click', async () => {
+  const url = `${location.origin}/c/${slug}`;
+  const title = state.comp?.title ?? document.title;
+  try {
+    if (navigator.share) await navigator.share({ title, text: `${title} 報名中！`, url });
+    else { await navigator.clipboard.writeText(url); alert('已複製比賽網址'); }
+  } catch { /* 使用者取消分享 */ }
+});
 
 // ---------- 報名 ----------
 const nameInput = $('name');
@@ -103,8 +124,8 @@ $('reg-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = $('submit-btn');
   btn.disabled = true;
+  btn.textContent = '送出中…';
   $('form-msg').className = 'msg';
-  $('after-reg').classList.add('hidden');
   try {
     if (!categorySelect.value) throw new Error('請選擇組別');
     const name = nameInput.value;
@@ -113,9 +134,15 @@ $('reg-form').addEventListener('submit', async (e) => {
     }));
     const cat = state.categories.find((c) => String(c.id) === categorySelect.value);
     state.lastRegistered = { id: result.id, display_name: result.display_name, category_name: cat?.name ?? '', fullName: name.trim() };
-    const fee = state.comp.fee ? `報名費 ${formatMoney(state.comp.fee)}，` : '';
-    showMsg($('form-msg'), `報名成功！${result.display_name} 已加入「${cat?.name ?? ''}」。${fee}匯款後請填寫繳費資訊。`, 'ok');
-    $('after-reg').classList.remove('hidden');
+
+    $('reg-done-text').replaceChildren(el('strong', {}, result.display_name), ` 已報名「${cat?.name ?? ''}」`,
+      state.comp.fee ? `，報名費 ${formatMoney(state.comp.fee)}。` : '。');
+    const instr = state.comp.payment_instructions.trim();
+    $('reg-done-pay').textContent = instr ? `匯款方式：\n${instr}` : '';
+    $('reg-done-pay').classList.toggle('hidden', !instr);
+    $('reg-card').classList.add('hidden');
+    $('reg-done').classList.remove('hidden');
+    window.scrollTo({ top: 0 });
     nameInput.value = '';
     $('preview').replaceChildren();
     await load();
@@ -123,8 +150,15 @@ $('reg-form').addEventListener('submit', async (e) => {
     showMsg($('form-msg'), err.message, 'err');
     load().catch(() => {});
   } finally {
+    btn.textContent = '送出報名';
     btn.disabled = !state.comp.registration_open;
   }
+});
+
+$('reg-again-btn').addEventListener('click', () => {
+  $('reg-done').classList.add('hidden');
+  $('reg-card').classList.remove('hidden');
+  nameInput.focus();
 });
 
 $('pay-now-btn').addEventListener('click', () => {
@@ -150,18 +184,18 @@ function renderList() {
     (state.filter === 'all' || String(r.category_id) === state.filter) &&
     (!kw || r.display_name.toLowerCase().includes(kw) || r.team.toLowerCase().includes(kw)));
 
-  $('total').textContent = `共 ${rows.length} 人`;
+  $('total').textContent = `${rows.length} 人`;
   if (!rows.length) {
-    $('list').replaceChildren(el('tr', {}, el('td', { colspan: 5, class: 'empty' }, '目前還沒有報名資料')));
+    $('list').replaceChildren(el('li', { class: 'empty', style: 'display:block' }, '目前還沒有報名資料'));
     return;
   }
-  $('list').replaceChildren(...rows.map((r, i) => el('tr', {},
-    el('td', { class: 'num' }, i + 1),
-    el('td', {}, r.display_name),
-    el('td', {}, r.category_name),
-    el('td', {}, r.team || '—'),
-    el('td', {}, r.payment_status === 'unpaid'
-      ? el('button', { type: 'button', class: 'pay unpaid', title: '點此填寫繳費資訊', onclick: () => openPayDialog(r) }, '未繳費 ✎')
+  $('list').replaceChildren(...rows.map((r, i) => el('li', {},
+    el('span', { class: 'no' }, i + 1),
+    el('div', { class: 'who' },
+      el('div', { class: 'name' }, r.display_name),
+      el('div', { class: 'sub' }, [r.category_name, r.team].filter(Boolean).join('・'))),
+    el('div', { class: 'end' }, r.payment_status === 'unpaid'
+      ? el('button', { type: 'button', class: 'pay unpaid', onclick: () => openPayDialog(r) }, '未繳費 ✎')
       : payBadge(r.payment_status)),
   )));
 }
@@ -187,12 +221,11 @@ function openPayDialog(reg, fullName = '') {
   $('pay-date').value = local;
   $('pay-date').max = local;
   dlg.showModal();
-  (fullName ? $('pay-last5') : $('pay-name')).focus();
+  if (!fullName) $('pay-name').focus();
 }
 
-const closeDlg = () => dlg.close();
-$('pay-close').addEventListener('click', closeDlg);
-$('pay-cancel').addEventListener('click', closeDlg);
+$('pay-close').addEventListener('click', () => dlg.close());
+dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); }); // 點背景關閉
 
 $('pay-form').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -220,10 +253,11 @@ $('pay-form').addEventListener('submit', async (e) => {
       p_proof_path: proofPath,
     }));
     dlg.close();
+    $('reg-done').classList.add('hidden');
+    $('reg-card').classList.remove('hidden');
     showTab('participants');
     await load();
-    const row = state.registrations.find((r) => r.id === reg.id);
-    alert(`已送出 ${row?.display_name ?? ''} 的繳費資訊，管理員確認後會改為「已繳費」。`);
+    alert(`已送出 ${reg.display_name} 的繳費資訊，工作人員確認後會改為「已繳費」。`);
   } catch (err) {
     showMsg($('pay-msg'), err.message, 'err');
     btn.disabled = false;
@@ -257,6 +291,7 @@ async function load() {
   renderCategorySelect();
   renderTabs();
   renderList();
+  updateCta();
   return true;
 }
 

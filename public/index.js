@@ -20,6 +20,7 @@ async function load() {
       c.event_date ? el('div', {}, `📅 ${formatDate(c.event_date)}`) : null,
       c.location ? el('div', {}, `📍 ${c.location}`) : null,
       c.fee != null ? el('div', {}, `💰 ${formatMoney(c.fee)}`) : null),
+    el('div', { class: 'go' }, c.registration_open ? '查看簡章・報名 →' : '查看簡章・名單 →'),
   )));
 }
 

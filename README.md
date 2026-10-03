@@ -18,13 +18,26 @@
 | 參加人員 | `/c/<比賽代碼>/participants` | 匿名姓名、組別、團體、繳費狀態；點「未繳費」可填寫繳費資訊 |
 | 成績 | `/c/<比賽代碼>/results` | 預留給之後的成績系統 |
 
-### 管理頁 `/admin`
+### 管理後台 `/admin`（手機、電腦都能用）
 
-- 切換比賽、新增比賽（每場比賽有自己的網址代碼，例如 `2026-spring`）
-- 比賽設定：名稱、日期、地點、報名費、匯款方式、簡章、是否公開、是否開放報名
-- 組別：新增／編輯／刪除、人數上限、開關報名
-- 繳費審核：查看選手送出的帳號後五碼、金額、日期、截圖，按「確認收款」或「退回」
-- 報名資料：真實姓名、直接修改繳費狀態（例如現場收現金）、繳費紀錄、編輯／刪除、匯出 CSV
+工作人員用 Email + 密碼登入。手機版下方有分頁列，電腦版在左側。
+
+| 分頁 | 內容 |
+| --- | --- |
+| 📊 總覽 | 報名人數、已繳費／待審核／未繳費、已確認收款金額、各組名額進度、最新報名、比賽網址 |
+| 👥 報名 | 依繳費狀態、組別篩選與搜尋；點選手可編輯資料、改繳費狀態（現場收現金）、看繳費紀錄、刪除；「代為報名」；匯出 CSV |
+| 💰 繳費 | 待審核的繳費資料（可直接看截圖），按「確認收款」或「退回」 |
+| ⚙️ 比賽設定 | 比賽名稱、網址代碼、日期、地點、報名費、匯款方式、簡章、公開／開放報名、組別 |
+| 👤 帳號 | 修改自己的密碼、登出；工作人員名單（管理員可新增、改角色、重設密碼、移除） |
+
+上方可切換比賽或按「＋ 新比賽」。
+
+#### 角色
+
+| 角色 | 可以做的事 |
+| --- | --- |
+| 管理員 | 全部功能，包含管理工作人員帳號、刪除比賽 |
+| 工作人員 | 修改比賽內容與組別、報名資料、審核繳費、查看統計 |
 
 ### 繳費流程
 
@@ -65,9 +78,10 @@
 2. 左側選 **SQL Editor** → **New query**，依序執行 `supabase/migrations/` 裡的檔案（每份整份貼上，按 **Run**）：
    1. [`20261003000000_init.sql`](supabase/migrations/20261003000000_init.sql)：報名資料表與權限
    2. [`20261004000000_competitions_payments.sql`](supabase/migrations/20261004000000_competitions_payments.sql)：多場比賽、繳費、截圖上傳
+   3. [`20261005000000_staff_roles.sql`](supabase/migrations/20261005000000_staff_roles.sql)：工作人員角色（管理員／工作人員）
 
-   > 已經上線過第一版的專案，只要執行第 2 份；原本的組別與報名會自動歸到一場「攀岩比賽」（網址代碼 `climbing-2026`），可在管理頁改名。
-   > **不要**再重新執行第 1 份。
+   > 已經上線過的專案，只要執行還沒跑過的那幾份（**不要**再重新執行第 1 份）。
+   > 第 2 份會把原本的組別與報名歸到一場「攀岩比賽」（網址代碼 `climbing-2026`）；第 3 份會把原本的管理員設為「管理員」角色。
 3. **關閉公開註冊**（避免陌生人註冊帳號）：**Authentication → Sign In / Providers**，把 **Allow new users to sign up** 關掉。
 4. **建立管理員帳號**：**Authentication → Users → Add user → Create new user**，輸入 Email 與密碼（勾選 Auto Confirm User）。
 5. 把這個帳號設為管理員：回到 **SQL Editor** 執行（Email 換成你的）：
@@ -76,9 +90,10 @@
    select id from auth.users where email = 'you@example.com';
    ```
    之後要加其他管理員，重複步驟 4、5 即可。
-6. 到 **Project Settings → API**（或 **Data API**），記下：
+6. 到 **Project Settings → API**（或 **Data API**／**API Keys**），記下：
    - **Project URL**（例：`https://xxxx.supabase.co`）
-   - **anon public** key
+   - **anon public** key（或 **Publishable key**）
+   - **service_role** key（或 **Secret key**）：只給 Netlify 伺服器端用，讓管理員能在後台直接建立工作人員帳號
 
 > anon key 是公開金鑰，本來就會出現在網頁裡；資料安全由上面的 RLS 規則保護。
 > **千萬不要**把 `service_role` key 放到 Netlify 或前端。
@@ -93,6 +108,10 @@
    | --- | --- |
    | `SUPABASE_URL` | 步驟 1-6 的 Project URL |
    | `SUPABASE_ANON_KEY` | 步驟 1-6 的 anon public key |
+   | `SUPABASE_SERVICE_ROLE_KEY` | 步驟 1-6 的 service_role／Secret key（**要勾選「Contains secret values」**） |
+
+   `SUPABASE_SERVICE_ROLE_KEY` 只在伺服器端（`netlify/functions/staff.mjs`）使用，不會出現在網頁裡。
+   沒有設定的話，後台仍可運作，只是新增工作人員時要先到 Supabase **Authentication → Users** 建立帳號，再到後台輸入 Email 加入。
 
 4. 按 **Deploy**。完成後打開網址就能報名，管理頁在 `/admin`。
 
@@ -109,6 +128,8 @@ SUPABASE_URL=https://xxxx.supabase.co SUPABASE_ANON_KEY=你的anon_key npm run d
 # 開啟 http://localhost:3000
 ```
 
+`npm run dev` 只有網頁，沒有 `/api/staff`（新增工作人員帳號）。要連同伺服器端功能一起測試，請用 [Netlify CLI](https://docs.netlify.com/cli/get-started/) 的 `netlify dev`。
+
 ## 測試
 
 資料庫的權限與報名規則有自動化測試，用本機 PostgreSQL（14 以上）模擬 Supabase 環境執行：
@@ -117,7 +138,7 @@ SUPABASE_URL=https://xxxx.supabase.co SUPABASE_ANON_KEY=你的anon_key npm run d
 npm run test:db
 ```
 
-會檢查：第一版資料升級、匿名規則、報名檢查（名額、關閉、重複、未公開比賽）、繳費資訊送出與審核、截圖上傳權限、訪客與一般登入者讀不到真實姓名與匯款資料、管理員可讀寫。
+會檢查：工作人員角色權限、第一版資料升級、匿名規則、報名檢查（名額、關閉、重複、未公開比賽）、繳費資訊送出與審核、截圖上傳權限、訪客與一般登入者讀不到真實姓名與匯款資料、管理員可讀寫。
 
 ## 專案結構
 
@@ -125,8 +146,9 @@ npm run test:db
 public/                         前端頁面（Netlify 發佈這個資料夾）
   index.html / index.js         比賽列表
   competition.html / .js        比賽頁（簡章、報名、參加人員、成績）
-  admin.html / admin.js         管理頁
+  admin.html / admin.js         管理後台
   common.js                     Supabase 連線與共用函式
+netlify/functions/staff.mjs     建立／重設密碼／刪除工作人員帳號（伺服器端）
 scripts/build-config.js    由環境變數產生 public/config.js
 supabase/migrations/       資料庫結構、權限、函式
 supabase/tests/            資料庫測試

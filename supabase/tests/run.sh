@@ -15,7 +15,10 @@ run -f supabase/migrations/20261003000000_init.sql
 # 模擬第一版上線後已有的報名資料
 run -c "insert into public.registrations (name, team, category_id) values ('舊資料', '', 1)"
 run -f supabase/migrations/20261004000000_competitions_payments.sql
-run -f supabase/migrations/20261004000000_competitions_payments.sql   # 可重複執行
+run -f supabase/migrations/20261005000000_staff_roles.sql
+# migration 必須可重複執行
+run -f supabase/migrations/20261004000000_competitions_payments.sql
+run -f supabase/migrations/20261005000000_staff_roles.sql
 
 PGOPTIONS="-c client_min_messages=notice" psql -q -X -t -v ON_ERROR_STOP=1 -d "$DB" \
   -f supabase/tests/db_test.sql 2>&1 | grep -v "^\s*$" | sed "s/^psql:[^ ]* NOTICE:  //"

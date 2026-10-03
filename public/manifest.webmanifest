@@ -1,0 +1,9 @@
+{
+  "name": "攀岩比賽報名",
+  "short_name": "攀岩比賽",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f3ef",
+  "theme_color": "#d9480f",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

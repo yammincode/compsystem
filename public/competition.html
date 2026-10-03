@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>攀岩比賽</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="site">
+    <div class="inner">
+      <a class="brand" href="/" style="color:inherit;text-decoration:none">🧗 攀岩比賽</a>
+      <nav><a href="/">所有比賽</a></nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="comp-head">
+      <h1 id="comp-title">載入中…</h1>
+      <div class="meta" id="comp-meta"></div>
+    </div>
+    <nav class="subnav" id="subnav">
+      <a data-tab="info">比賽簡章</a>
+      <a data-tab="register">報名</a>
+      <a data-tab="participants">參加人員</a>
+      <a data-tab="results">成績</a>
+    </nav>
+
+    <!-- 比賽簡章 -->
+    <section class="tab hidden" data-tab="info">
+      <div class="card">
+        <div class="info-grid" id="info-grid"></div>
+      </div>
+      <div class="card" id="brochure-card">
+        <h2>簡章</h2>
+        <div id="brochure"></div>
+      </div>
+      <div class="card">
+        <h2>組別</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>組別</th><th>說明</th><th>名額</th><th>狀態</th></tr></thead>
+            <tbody id="info-cats"></tbody>
+          </table>
+        </div>
+        <div class="actions"><a class="btn" data-goto="register">我要報名</a></div>
+      </div>
+    </section>
+
+    <!-- 報名 -->
+    <section class="tab hidden" data-tab="register">
+      <div class="card">
+        <h2>報名表</h2>
+        <p class="lead" style="margin-bottom:16px">公開名單上的姓名會自動匿名（例：王小明 → 王X明、王明 → 王X）。</p>
+        <form id="reg-form" autocomplete="off">
+          <div class="grid">
+            <div>
+              <label for="name">姓名</label>
+              <input id="name" name="name" required maxlength="30" placeholder="請輸入真實姓名">
+            </div>
+            <div>
+              <label for="category">組別</label>
+              <select id="category" name="category_id" required>
+                <option value="">載入中…</option>
+              </select>
+            </div>
+            <div>
+              <label for="team">所屬團體 <span class="hint">（選填）</span></label>
+              <input id="team" name="team" maxlength="50" placeholder="例：XX 攀岩館、XX 大學登山社">
+            </div>
+          </div>
+          <div class="actions">
+            <button type="submit" id="submit-btn">送出報名</button>
+            <span class="preview" id="preview"></span>
+          </div>
+          <div class="msg" id="form-msg" role="status"></div>
+          <div class="actions hidden" id="after-reg">
+            <button type="button" id="pay-now-btn">填寫繳費資訊</button>
+            <a class="btn secondary" data-goto="participants">查看參加人員</a>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- 參加人員 -->
+    <section class="tab hidden" data-tab="participants">
+      <div class="card">
+        <h2>參加人員</h2>
+        <p class="preview" style="margin-top:-8px">已匯款的選手請點自己名字旁的 <span class="pay unpaid">未繳費</span> 填寫繳費資訊，管理員確認後會改為 <span class="pay paid">已繳費</span>。</p>
+        <div class="tabs" id="tabs"></div>
+        <div class="toolbar">
+          <input type="search" id="search" placeholder="搜尋姓名或團體">
+          <span class="spacer"></span>
+          <span class="preview" id="total"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>姓名</th><th>組別</th><th>所屬團體</th><th>繳費</th></tr></thead>
+            <tbody id="list"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 成績 -->
+    <section class="tab hidden" data-tab="results">
+      <div class="card placeholder">
+        <div class="icon">🏆</div>
+        <h2>比賽成績</h2>
+        <p class="lead">成績系統建置中，比賽開始後將依組別公布成績。</p>
+      </div>
+    </section>
+
+    <div class="card placeholder hidden" id="not-found">
+      <div class="icon">🔍</div>
+      <h2>找不到這場比賽</h2>
+      <p class="lead">網址可能有誤，或比賽尚未公開。</p>
+      <a class="btn secondary" href="/">回到比賽列表</a>
+    </div>
+  </main>
+
+  <!-- 繳費資訊對話框 -->
+  <dialog id="pay-dialog">
+    <form id="pay-form" class="dlg-body" autocomplete="off">
+      <div class="dlg-head">
+        <h2>填寫繳費資訊</h2>
+        <button type="button" class="close" id="pay-close" aria-label="關閉">×</button>
+      </div>
+      <div class="notice" id="pay-who"></div>
+      <div class="notice pre-wrap hidden" id="pay-instructions"></div>
+      <div class="form-stack">
+        <div>
+          <label for="pay-name">真實姓名 <span class="hint">（核對身分用，需與報名時相同）</span></label>
+          <input id="pay-name" required maxlength="30">
+        </div>
+        <div class="grid">
+          <div>
+            <label for="pay-last5">匯款帳號後五碼</label>
+            <input id="pay-last5" required inputmode="numeric" pattern="[0-9]{5}" maxlength="5" placeholder="12345">
+          </div>
+          <div>
+            <label for="pay-amount">金額</label>
+            <input id="pay-amount" type="number" required min="1">
+          </div>
+          <div>
+            <label for="pay-date">匯款日期</label>
+            <input id="pay-date" type="date" required>
+          </div>
+        </div>
+        <div>
+          <label for="pay-file">匯款證明截圖 <span class="hint">（選填，圖片或 PDF）</span></label>
+          <input id="pay-file" type="file" accept="image/*,application/pdf">
+        </div>
+        <div>
+          <label for="pay-note">備註 <span class="hint">（選填）</span></label>
+          <textarea id="pay-note" maxlength="500" placeholder="例：與 王X明 一起匯款"></textarea>
+        </div>
+      </div>
+      <div class="msg" id="pay-msg"></div>
+      <div class="actions">
+        <button type="submit" id="pay-submit">送出</button>
+        <button type="button" class="secondary" id="pay-cancel">取消</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked@18.0.14/lib/marked.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.4.16/dist/purify.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
+  <script src="/config.js"></script>
+  <script src="/common.js"></script>
+  <script src="/competition.js"></script>
+</body>
+</html>

@@ -1,106 +1,28 @@
 'use strict';
 
-const state = { categories: [], registrations: [], filter: 'all', search: '' };
+async function load() {
+  const list = document.getElementById('list');
+  const comps = check(await sb.from('competitions')
+    .select('slug, title, event_date, location, fee, registration_open, is_published')
+    .order('event_date', { ascending: false, nullsFirst: false })
+    .order('id', { ascending: false }));
 
-const form = document.getElementById('reg-form');
-const nameInput = document.getElementById('name');
-const categorySelect = document.getElementById('category');
-const teamInput = document.getElementById('team');
-const submitBtn = document.getElementById('submit-btn');
-const formMsg = document.getElementById('form-msg');
-const preview = document.getElementById('preview');
-
-function renderCategorySelect() {
-  const current = categorySelect.value;
-  categorySelect.replaceChildren(el('option', { value: '' }, '請選擇組別'));
-  for (const c of state.categories) {
-    const s = categoryStatus(c);
-    const label = c.description ? `${c.name}（${c.description}）` : c.name;
-    categorySelect.append(el('option', { value: c.id, disabled: !s.available },
-      s.available ? label : `${label} — ${s.text}`));
-  }
-  if ([...categorySelect.options].some((o) => o.value === current && !o.disabled)) {
-    categorySelect.value = current;
-  }
-}
-
-function renderTabs() {
-  const tabs = document.getElementById('tabs');
-  const mk = (key, label, count) => el('button', {
-    type: 'button',
-    class: state.filter === key ? 'active' : '',
-    onclick: () => { state.filter = key; renderTabs(); renderList(); },
-  }, label, ' ', el('span', { class: 'count' }, `(${count})`));
-
-  tabs.replaceChildren(
-    mk('all', '全部', state.registrations.length),
-    ...state.categories.map((c) => mk(String(c.id), c.name, c.count)),
-  );
-}
-
-function renderList() {
-  const tbody = document.getElementById('list');
-  const kw = state.search.trim().toLowerCase();
-  const rows = state.registrations.filter((r) =>
-    (state.filter === 'all' || String(r.category_id) === state.filter) &&
-    (!kw || r.display_name.toLowerCase().includes(kw) || r.team.toLowerCase().includes(kw)));
-
-  document.getElementById('total').textContent = `共 ${rows.length} 人`;
-  if (!rows.length) {
-    tbody.replaceChildren(el('tr', {}, el('td', { colspan: 4, class: 'empty' }, '目前還沒有報名資料')));
+  if (!comps.length) {
+    list.replaceChildren(el('p', { class: 'empty' }, '目前沒有公開的比賽'));
     return;
   }
-  tbody.replaceChildren(...rows.map((r, i) => el('tr', {},
-    el('td', { class: 'num' }, i + 1),
-    el('td', {}, r.display_name),
-    el('td', {}, r.category_name),
-    el('td', {}, r.team || '—'),
+  list.replaceChildren(...comps.map((c) => el('a', { class: 'comp-card', href: `/c/${c.slug}` },
+    el('div', {},
+      c.registration_open ? el('span', { class: 'badge' }, '報名中') : el('span', { class: 'badge closed' }, '報名截止'),
+      c.is_published ? null : el('span', { class: 'badge full', style: 'margin-left:6px' }, '未公開（僅管理員可見）')),
+    el('h2', {}, c.title),
+    el('div', { class: 'meta' },
+      c.event_date ? el('div', {}, `📅 ${formatDate(c.event_date)}`) : null,
+      c.location ? el('div', {}, `📍 ${c.location}`) : null,
+      c.fee != null ? el('div', {}, `💰 ${formatMoney(c.fee)}`) : null),
   )));
 }
 
-async function load() {
-  const [categories, registrations] = await Promise.all([
-    sb.rpc('list_categories').then(check),
-    sb.rpc('list_public_registrations').then(check),
-  ]);
-  state.categories = categories;
-  state.registrations = registrations;
-  if (state.filter !== 'all' && !categories.some((c) => String(c.id) === state.filter)) state.filter = 'all';
-  renderCategorySelect();
-  renderTabs();
-  renderList();
-}
-
-nameInput.addEventListener('input', () => {
-  const v = nameInput.value.trim();
-  preview.replaceChildren(...(v ? ['名單上會顯示為：', el('strong', {}, anonymizeName(v))] : []));
+load().catch((err) => {
+  document.getElementById('list').replaceChildren(el('div', { class: 'msg show err' }, `無法載入資料：${err.message}`));
 });
-
-document.getElementById('search').addEventListener('input', (e) => {
-  state.search = e.target.value;
-  renderList();
-});
-
-form.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  submitBtn.disabled = true;
-  formMsg.className = 'msg';
-  try {
-    if (!categorySelect.value) throw new Error('請選擇組別');
-    const displayName = check(await sb.rpc('register', {
-      p_name: nameInput.value, p_team: teamInput.value, p_category_id: Number(categorySelect.value),
-    }));
-    const cat = categorySelect.options[categorySelect.selectedIndex]?.text ?? '';
-    showMsg(formMsg, `報名成功！${displayName} 已加入「${cat}」。`, 'ok');
-    nameInput.value = '';
-    preview.replaceChildren();
-    await load();
-  } catch (err) {
-    showMsg(formMsg, err.message, 'err');
-    load().catch(() => {});
-  } finally {
-    submitBtn.disabled = false;
-  }
-});
-
-load().catch((err) => showMsg(formMsg, `無法載入資料：${err.message}`, 'err'));

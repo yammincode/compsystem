@@ -17,3 +17,15 @@
   for = "/admin*"
   [headers.values]
     X-Robots-Tag = "noindex"
+
+# 每場比賽的頁面：/c/<比賽代碼>、/c/<比賽代碼>/register ...
+[[redirects]]
+  from = "/c/*"
+  to = "/competition.html"
+  status = 200
+
+# 第一版的成績頁網址
+[[redirects]]
+  from = "/results"
+  to = "/"
+  status = 301

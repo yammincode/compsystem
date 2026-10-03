@@ -8,11 +8,34 @@
 
 ## 功能
 
+### 公開頁面
+
 | 頁面 | 路徑 | 說明 |
 | --- | --- | --- |
-| 報名頁 | `/` | 填寫姓名、選擇組別、填寫所屬團體（選填）；下方為公開報名名單，可依組別篩選、搜尋 |
-| 比賽成績 | `/results` | 預留給之後的成績系統 |
-| 管理頁 | `/admin` | 管理員登入後可新增／編輯／刪除組別、設定人數上限、開關報名；查看真實姓名、編輯／刪除報名、匯出 CSV |
+| 比賽列表 | `/` | 所有公開的比賽 |
+| 比賽簡章 | `/c/<比賽代碼>` | 日期、地點、報名費、簡章內容（Markdown）、組別與名額 |
+| 報名 | `/c/<比賽代碼>/register` | 填寫姓名、組別、所屬團體；報名成功後可直接填寫繳費資訊 |
+| 參加人員 | `/c/<比賽代碼>/participants` | 匿名姓名、組別、團體、繳費狀態；點「未繳費」可填寫繳費資訊 |
+| 成績 | `/c/<比賽代碼>/results` | 預留給之後的成績系統 |
+
+### 管理頁 `/admin`
+
+- 切換比賽、新增比賽（每場比賽有自己的網址代碼，例如 `2026-spring`）
+- 比賽設定：名稱、日期、地點、報名費、匯款方式、簡章、是否公開、是否開放報名
+- 組別：新增／編輯／刪除、人數上限、開關報名
+- 繳費審核：查看選手送出的帳號後五碼、金額、日期、截圖，按「確認收款」或「退回」
+- 報名資料：真實姓名、直接修改繳費狀態（例如現場收現金）、繳費紀錄、編輯／刪除、匯出 CSV
+
+### 繳費流程
+
+```
+未繳費 ──選手送出繳費資訊──▶ 審核中 ──管理員確認收款──▶ 已繳費
+   ▲                           │
+   └──────管理員退回────────────┘
+```
+
+- 選手送出時必須輸入**報名時的真實姓名**核對，避免別人代填。
+- 匯款截圖存在 Supabase Storage 的**私人** bucket，只有管理員能查看。
 
 ### 姓名匿名規則
 
@@ -24,18 +47,13 @@
 
 ### 資料安全
 
-真實姓名只存在 `registrations` 資料表，這張表透過 Supabase 的 RLS（Row Level Security）**只允許管理員讀取**。
-一般訪客只能呼叫兩個資料庫函式：
-
-- `list_public_registrations()`：回傳 **已匿名** 的名單
-- `register()`：報名（會檢查組別是否開放、名額、重複報名）
-
-所以就算有人直接用 API 金鑰查資料庫，也拿不到真實姓名。
+真實姓名與匯款資料只存在 `registrations`、`payments` 資料表，透過 Supabase 的 RLS（Row Level Security）**只允許管理員讀取**。
+一般訪客只能透過資料庫函式取得**已匿名**的名單、報名、送出繳費資訊；未公開的比賽訪客完全看不到。
 
 ### 其他規則
 - 同一組別中「姓名 + 所屬團體」相同視為重複報名，會被拒絕。
 - 組別可設人數上限，額滿或關閉報名的組別無法選擇。
-- 已有人報名的組別不能刪除（請改為關閉報名）。
+- 已有人報名的組別不能刪除；有組別的比賽不能刪除（請改為不公開或關閉報名）。
 
 ---
 
@@ -44,8 +62,12 @@
 ### 1. 建立 Supabase 專案
 
 1. 到 <https://supabase.com> 建立新專案。
-2. 左側選 **SQL Editor** → **New query**，把 [`supabase/migrations/20261003000000_init.sql`](supabase/migrations/20261003000000_init.sql) 整份貼上，按 **Run**。
-   會建立資料表、權限設定，以及三個範例組別（男子公開組、女子公開組、青少年組）。
+2. 左側選 **SQL Editor** → **New query**，依序執行 `supabase/migrations/` 裡的檔案（每份整份貼上，按 **Run**）：
+   1. [`20261003000000_init.sql`](supabase/migrations/20261003000000_init.sql)：報名資料表與權限
+   2. [`20261004000000_competitions_payments.sql`](supabase/migrations/20261004000000_competitions_payments.sql)：多場比賽、繳費、截圖上傳
+
+   > 已經上線過第一版的專案，只要執行第 2 份；原本的組別與報名會自動歸到一場「攀岩比賽」（網址代碼 `climbing-2026`），可在管理頁改名。
+   > **不要**再重新執行第 1 份。
 3. **關閉公開註冊**（避免陌生人註冊帳號）：**Authentication → Sign In / Providers**，把 **Allow new users to sign up** 關掉。
 4. **建立管理員帳號**：**Authentication → Users → Add user → Create new user**，輸入 Email 與密碼（勾選 Auto Confirm User）。
 5. 把這個帳號設為管理員：回到 **SQL Editor** 執行（Email 換成你的）：
@@ -95,16 +117,16 @@ SUPABASE_URL=https://xxxx.supabase.co SUPABASE_ANON_KEY=你的anon_key npm run d
 npm run test:db
 ```
 
-會檢查：匿名規則、報名檢查（名額、關閉、重複）、訪客讀不到真實姓名、訪客與一般登入者不能修改組別、管理員可讀寫。
+會檢查：第一版資料升級、匿名規則、報名檢查（名額、關閉、重複、未公開比賽）、繳費資訊送出與審核、截圖上傳權限、訪客與一般登入者讀不到真實姓名與匯款資料、管理員可讀寫。
 
 ## 專案結構
 
 ```
-public/                    前端頁面（Netlify 發佈這個資料夾）
-  index.html / index.js    報名頁
-  admin.html / admin.js    管理頁
-  results.html             比賽成績（預留）
-  common.js                Supabase 連線與共用函式
+public/                         前端頁面（Netlify 發佈這個資料夾）
+  index.html / index.js         比賽列表
+  competition.html / .js        比賽頁（簡章、報名、參加人員、成績）
+  admin.html / admin.js         管理頁
+  common.js                     Supabase 連線與共用函式
 scripts/build-config.js    由環境變數產生 public/config.js
 supabase/migrations/       資料庫結構、權限、函式
 supabase/tests/            資料庫測試
@@ -113,6 +135,6 @@ netlify.toml               Netlify 設定
 
 ## 之後的成績系統
 
-`registrations` 已有每位選手的 `id` 與 `category_id`，之後可新增 `results` 資料表
+`registrations` 已有每位選手的 `id` 與 `category_id`（組別屬於某場比賽），之後可新增 `results` 資料表
 （例如 `registration_id`、`route`、`tops`、`zones`、`attempts`），並用類似 `list_public_registrations()`
-的函式在 `/results` 依組別公開匿名排名。
+的函式在 `/c/<比賽代碼>/results` 依組別公開匿名排名。

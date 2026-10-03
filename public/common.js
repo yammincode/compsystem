@@ -9,12 +9,14 @@ if (!cfg.supabaseUrl || !cfg.supabaseAnonKey) {
   });
 }
 const sb = window.supabase.createClient(cfg.supabaseUrl || 'http://invalid.local', cfg.supabaseAnonKey || 'missing');
+const PROOF_BUCKET = 'payment-proofs';
 
 const PG_ERRORS = {
-  '23505': '資料重複（名稱已存在或已報名過）',
-  '23503': '這個組別已經有人報名，請先移除報名資料或改為「關閉報名」',
-  '23514': '欄位內容不符合規定（請檢查字數或人數上限）',
+  '23505': '資料重複（名稱或網址代碼已存在，或已報名過）',
+  '23503': '還有相關資料，無法刪除（請先刪除底下的報名或組別，或改為關閉）',
+  '23514': '欄位內容不符合規定（請檢查字數、格式或數字）',
   '42501': '沒有權限，請重新登入管理員',
+  'PGRST116': '找不到資料或沒有權限，請重新整理頁面或重新登入',
 };
 
 // 把 Supabase 回傳的錯誤轉成中文訊息後丟出
@@ -58,14 +60,63 @@ function showMsg(box, text, type) {
   box.className = `msg show ${type}`;
 }
 
-function categoryStatus(c) {
-  if (!c.is_open) return { text: '已截止', cls: 'closed', available: false };
+function categoryStatus(c, competitionOpen = true) {
+  if (!competitionOpen || !c.is_open) return { text: '已截止', cls: 'closed', available: false };
   if (c.capacity != null && c.count >= c.capacity) return { text: '已額滿', cls: 'full', available: false };
   const left = c.capacity != null ? `剩 ${c.capacity - c.count} 名` : '開放報名';
   return { text: left, cls: '', available: true };
 }
 
+const PAY_LABEL = { unpaid: '未繳費', pending: '審核中', paid: '已繳費' };
+function payBadge(status) {
+  return el('span', { class: `pay ${status}` }, PAY_LABEL[status] ?? status);
+}
+
 function formatTime(ts) {
   const d = new Date(ts);
   return isNaN(d) ? ts : d.toLocaleString('zh-TW', { hour12: false });
+}
+
+function formatDate(d) {
+  if (!d) return '';
+  const [y, m, day] = String(d).split('-').map(Number);
+  const wd = '日一二三四五六'[new Date(y, m - 1, day).getDay()];
+  return `${y}/${m}/${day}（${wd}）`;
+}
+
+function formatMoney(n) {
+  return n == null ? '' : `NT$ ${Number(n).toLocaleString('zh-TW')}`;
+}
+
+// 簡章：Markdown → 過濾後的安全 HTML
+function renderMarkdown(text) {
+  const div = el('div', { class: 'prose' });
+  if (window.marked && window.DOMPurify) {
+    div.innerHTML = DOMPurify.sanitize(marked.parse(String(text ?? ''), { breaks: true }));
+    div.querySelectorAll('a[href^="http"]').forEach((a) => { a.target = '_blank'; a.rel = 'noopener'; });
+  } else {
+    div.classList.add('pre-wrap');
+    div.textContent = text ?? '';
+  }
+  return div;
+}
+
+// 手機照片通常很大：可解碼的圖片縮到 2000px 內轉 JPEG；其他檔案原樣上傳
+async function prepareUpload(file) {
+  const MAX = 5 * 1024 * 1024;
+  if (/^image\/(jpeg|png|webp)$/.test(file.type)) {
+    try {
+      const bmp = await createImageBitmap(file);
+      const scale = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+      const canvas = el('canvas', { width: Math.round(bmp.width * scale), height: Math.round(bmp.height * scale) });
+      canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.85));
+      if (blob && blob.size < file.size) return { blob, ext: 'jpg', type: 'image/jpeg' };
+    } catch { /* 無法解碼就用原檔 */ }
+  }
+  if (file.size > MAX) throw new Error('檔案太大，請小於 5MB');
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  const allowed = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif', pdf: 'application/pdf' };
+  if (!allowed[ext]) throw new Error('只接受 JPG、PNG、WEBP、HEIC 圖片或 PDF');
+  return { blob: file, ext, type: file.type || allowed[ext] };
 }

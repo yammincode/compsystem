@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>攀岩比賽報名</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="site">
+    <div class="inner">
+      <div class="brand">🧗 攀岩比賽</div>
+      <nav>
+        <a href="/" class="active">報名</a>
+        <a href="/results">比賽成績</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <h1>選手報名</h1>
+    <p class="lead">填寫資料後送出即完成報名。公開名單上的姓名會自動匿名（例：王小明 → 王X明、王明 → 王X）。</p>
+
+    <section class="card">
+      <h2>報名表</h2>
+      <form id="reg-form" autocomplete="off">
+        <div class="grid">
+          <div>
+            <label for="name">姓名</label>
+            <input id="name" name="name" required maxlength="30" placeholder="請輸入真實姓名">
+          </div>
+          <div>
+            <label for="category">組別</label>
+            <select id="category" name="category_id" required>
+              <option value="">載入中…</option>
+            </select>
+          </div>
+          <div>
+            <label for="team">所屬團體 <span class="hint">（選填）</span></label>
+            <input id="team" name="team" maxlength="50" placeholder="例：XX 攀岩館、XX 大學登山社">
+          </div>
+        </div>
+        <div class="actions">
+          <button type="submit" id="submit-btn">送出報名</button>
+          <span class="preview" id="preview"></span>
+        </div>
+        <div class="msg" id="form-msg" role="status"></div>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>報名名單</h2>
+      <div class="tabs" id="tabs"></div>
+      <div class="toolbar">
+        <input type="search" id="search" placeholder="搜尋姓名或團體">
+        <span class="spacer"></span>
+        <span class="preview" id="total"></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>姓名</th><th>組別</th><th>所屬團體</th></tr></thead>
+          <tbody id="list"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/common.js"></script>
+  <script src="/index.js"></script>
+</body>
+</html>

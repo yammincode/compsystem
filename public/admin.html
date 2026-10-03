@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>報名管理</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="site">
+    <div class="inner">
+      <div class="brand">🧗 攀岩比賽 · 管理</div>
+      <nav>
+        <a href="/">報名頁</a>
+        <a href="/results">比賽成績</a>
+        <a href="/admin" class="active">管理</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="card hidden" id="login-view">
+      <h2>管理員登入</h2>
+      <form id="login-form">
+        <label for="password">密碼</label>
+        <input type="password" id="password" required autocomplete="current-password">
+        <div class="actions"><button type="submit">登入</button></div>
+        <div class="msg" id="login-msg"></div>
+      </form>
+    </section>
+
+    <div class="hidden" id="admin-view">
+      <div class="toolbar">
+        <h1 style="margin:0">報名管理</h1>
+        <span class="spacer"></span>
+        <a class="btn secondary" href="/api/admin/export.csv">匯出 CSV</a>
+        <button class="secondary" id="logout-btn">登出</button>
+      </div>
+      <p class="lead">此頁面可看到選手真實姓名，請勿外流。</p>
+
+      <section class="card">
+        <h2>組別設定</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>排序</th><th>組別名稱</th><th>說明</th><th>人數上限</th><th>開放報名</th><th>已報名</th><th></th></tr></thead>
+            <tbody id="cat-list"></tbody>
+          </table>
+        </div>
+        <h2 style="margin-top:24px">新增組別</h2>
+        <form id="cat-form">
+          <div class="grid">
+            <div><label for="cat-name">組別名稱</label><input id="cat-name" required maxlength="40" placeholder="例：男子初階組"></div>
+            <div><label for="cat-desc">說明 <span class="hint">（選填）</span></label><input id="cat-desc" maxlength="200" placeholder="例：攀爬經驗一年以下"></div>
+            <div><label for="cat-cap">人數上限 <span class="hint">（空白 = 不限）</span></label><input id="cat-cap" type="number" min="1"></div>
+            <div><label for="cat-sort">排序</label><input id="cat-sort" type="number" value="0"></div>
+          </div>
+          <div class="actions"><button type="submit">新增組別</button></div>
+        </form>
+        <div class="msg" id="cat-msg"></div>
+      </section>
+
+      <section class="card">
+        <h2>報名資料</h2>
+        <div class="tabs" id="tabs"></div>
+        <div class="toolbar">
+          <input type="search" id="search" placeholder="搜尋姓名或團體">
+          <span class="spacer"></span>
+          <span class="preview" id="total"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>真實姓名</th><th>公開顯示</th><th>組別</th><th>所屬團體</th><th>報名時間</th><th></th></tr></thead>
+            <tbody id="reg-list"></tbody>
+          </table>
+        </div>
+        <div class="msg" id="reg-msg"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/common.js"></script>
+  <script src="/admin.js"></script>
+</body>
+</html>

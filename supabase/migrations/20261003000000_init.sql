@@ -112,6 +112,11 @@ alter table public.registrations enable row level security;
 alter table public.admins        enable row level security;
 
 revoke all on public.registrations, public.admins from anon;
+-- 明確授權（即使建立專案時沒勾「Automatically expose new tables」也能運作）
+grant select on public.categories to anon, authenticated;
+grant insert, update, delete on public.categories to authenticated;
+grant select, insert, update, delete on public.registrations to authenticated;
+grant select on public.admins to authenticated;
 revoke all on function public.register(text, text, bigint)    from public;
 revoke all on function public.list_categories()                from public;
 revoke all on function public.list_public_registrations()      from public;

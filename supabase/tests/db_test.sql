@@ -7,7 +7,7 @@ begin
   execute sql;
   raise exception 'FAIL: expected error "%" but succeeded: %', msg, sql;
 exception when others then
-  if sqlerrm not like '%' || msg || '%' then
+  if sqlerrm !~ msg then
     raise exception 'FAIL: expected "%" got "%" for: %', msg, sqlerrm, sql;
   end if;
 end $$;
@@ -46,7 +46,7 @@ select pg_temp.check((select array_agg(display_name order by id) from list_publi
 select pg_temp.check((select bool_and(count = case name when '限額組' then 2 when '男子公開組' then 1 else 0 end) from list_categories()), '人數統計');
 select pg_temp.expect_error('select * from registrations', 'permission denied');
 select pg_temp.expect_error($$insert into registrations (name, category_id) values ('x', 1)$$, 'permission denied');
-select pg_temp.expect_error($$insert into categories (name) values ('駭客組')$$, 'row-level security');
+select pg_temp.expect_error($$insert into categories (name) values ('駭客組')$$, 'row-level security|permission denied');
 update categories set is_open = false;  -- RLS：不會更新任何資料
 select pg_temp.check((select count(*) from categories where is_open) = 4, '訪客無法修改組別');
 select pg_temp.expect_error('select * from admins', 'permission denied');
@@ -57,7 +57,7 @@ set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000002';
 select pg_temp.check((select count(*) from registrations) = 0, '非管理員看不到報名資料');
 select pg_temp.check(not is_admin(), '非管理員 is_admin = false');
-select pg_temp.expect_error($$insert into categories (name) values ('駭客組')$$, 'row-level security');
+select pg_temp.expect_error($$insert into categories (name) values ('駭客組')$$, 'row-level security|permission denied');
 select pg_temp.expect_error($$insert into admins values ('00000000-0000-0000-0000-000000000002')$$, 'row-level security');
 
 -- ===== 管理員 =====

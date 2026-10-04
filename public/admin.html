@@ -82,9 +82,15 @@
           <div class="tabs" id="cat-tabs"></div>
           <div class="toolbar">
             <input type="search" id="search" placeholder="🔍 搜尋姓名或團體">
+            <button class="secondary small hidden" id="missing-birth-btn"></button>
             <button class="secondary small" id="export-btn">匯出 CSV</button>
           </div>
-          <div class="muted" id="reg-total" style="margin-bottom:4px"></div>
+          <div class="notice hidden" id="birth-mode-hint">
+            📅 <strong>補生日模式</strong>：以下是還沒有出生日期的選手，填好日期按「儲存」即可（以比賽日期計算年齡）。
+            未滿 18 歲的選手補完後會標示「缺家長同意書」，請於報到時請家長簽署紙本。
+          </div>
+          <div class="msg" id="reg-msg-inline"></div>
+          <div class="muted" id="reg-total" style="margin:8px 0 4px"></div>
           <div id="reg-list"></div>
         </div>
       </section>

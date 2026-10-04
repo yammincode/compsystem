@@ -17,6 +17,7 @@ const state = {
   payFilter: '',
   search: '',
   payView: 'pending',
+  missingBirth: false, // 補生日模式
   editing: null,       // 報名詳細對話框中的報名；{} = 代為報名
 };
 
@@ -247,6 +248,12 @@ function renderDashboard() {
     stat('未繳費', count('unpaid'), count('unpaid') ? 'err' : ''),
   );
   if (income) $('stats').append(stat('已確認收款', formatMoney(income), 'ok'));
+  const noBirth = regs.filter((r) => !r.birth_date).length;
+  if (noBirth) {
+    const s = stat('缺出生日期', noBirth, 'warn', '#regs');
+    s.addEventListener('click', () => { state.missingBirth = true; renderRegs(); });
+    $('stats').append(s);
+  }
 
   $('cat-stats').replaceChildren(...(state.categories.length ? state.categories.map((cat) => {
     const inCat = regs.filter((r) => r.category_id === cat.id);
@@ -287,6 +294,7 @@ const refDate = () => currentComp()?.event_date || todayStr();
 const isMinorReg = (r) => r.age != null && r.age < 18;
 
 function minorBadge(r) {
+  if (!r.birth_date) return el('div', { style: 'margin-top:2px' }, el('span', { class: 'badge full' }, '缺生日'));
   if (!isMinorReg(r)) return null;
   return el('div', { style: 'margin-top:2px' },
     el('span', { class: 'badge full' }, `未成年 ${r.age} 歲`), ' ',
@@ -369,6 +377,7 @@ function renderCatTabs() {
 function filteredRegs() {
   const kw = state.search.trim().toLowerCase();
   return state.registrations.filter((r) =>
+    (!state.missingBirth || !r.birth_date) &&
     (state.catFilter === 'all' || String(r.category_id) === state.catFilter) &&
     (!state.payFilter || r.payment_status === state.payFilter) &&
     (!kw || r.name.toLowerCase().includes(kw) || r.team.toLowerCase().includes(kw)));
@@ -377,10 +386,50 @@ function filteredRegs() {
 function renderRegs() {
   renderPaySeg();
   renderCatTabs();
+  const missing = state.registrations.filter((r) => !r.birth_date).length;
+  const btn = $('missing-birth-btn');
+  btn.classList.toggle('hidden', !missing && !state.missingBirth);
+  btn.textContent = state.missingBirth ? '✕ 結束補生日' : `📅 補生日（${missing}）`;
+  $('birth-mode-hint').classList.toggle('hidden', !state.missingBirth);
+
   const rows = filteredRegs();
   $('reg-total').textContent = `${rows.length} 筆`;
-  $('reg-list').replaceChildren(...(rows.length ? rows.map(regItem) : [el('p', { class: 'empty' }, '沒有符合的報名資料')]));
+  $('reg-list').replaceChildren(...(rows.length
+    ? rows.map(state.missingBirth ? birthRow : regItem)
+    : [el('p', { class: 'empty' }, state.missingBirth ? '🎉 所有選手都有出生日期了' : '沒有符合的報名資料')]));
 }
+
+// 補生日模式：每一列直接填日期
+function birthRow(r) {
+  const input = el('input', { type: 'date', min: '1900-01-01', max: todayStr(), style: 'width:auto;flex:1 1 150px', 'aria-label': `${r.name} 的出生日期` });
+  const hint = el('div', { class: 'muted', style: 'font-size:.85rem' });
+  input.addEventListener('input', () => {
+    const age = ageOn(input.value, refDate());
+    hint.textContent = age == null ? '' : `比賽當天 ${age} 歲${age < 18 ? '・未成年' : ''}`;
+  });
+  const save = el('button', { type: 'button', class: 'small', onclick: () => guard($('reg-msg-inline'), async () => {
+    if (!input.value) throw new Error(`請填寫 ${r.name} 的出生日期`);
+    const age = ageOn(input.value, refDate());
+    if (age < 0 || age > 120) throw new Error('出生日期不正確');
+    save.disabled = true;
+    check(await sb.from('registrations').update({ birth_date: input.value }).eq('id', r.id).select('id').single());
+    showMsg($('reg-msg-inline'), `已儲存 ${r.name}：${input.value}（${age} 歲${age < 18 ? '，未成年，需補家長同意書' : ''}）`, 'ok');
+    await loadDetail();
+  }).finally(() => { save.disabled = false; }) }, '儲存');
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') save.click(); });
+  return el('div', { class: 'reg-item', style: 'cursor:default;flex-wrap:wrap' },
+    el('div', { class: 'who', style: 'flex:1 1 160px' },
+      el('div', { class: 'name' }, r.name),
+      el('div', { class: 'sub' }, [r.category_name, r.team].filter(Boolean).join('・')),
+      hint),
+    input, save);
+}
+
+$('missing-birth-btn').addEventListener('click', () => {
+  state.missingBirth = !state.missingBirth;
+  $('reg-msg-inline').className = 'msg';
+  renderRegs();
+});
 
 $('search').addEventListener('input', (e) => { state.search = e.target.value; renderRegs(); });
 

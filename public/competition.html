@@ -66,9 +66,46 @@
               </select>
             </div>
             <div>
+              <label for="birth">出生日期</label>
+              <input id="birth" name="birth" type="date" required min="1900-01-01">
+              <div class="field-hint" id="age-hint"></div>
+            </div>
+            <div>
               <label for="team">所屬團體 <span class="hint">（選填）</span></label>
               <input id="team" name="team" maxlength="50" placeholder="例：XX 攀岩館、XX 大學登山社">
             </div>
+          </div>
+
+          <!-- 未滿 18 歲：家長同意書 -->
+          <div class="consent hidden" id="consent-box">
+            <h3>👪 家長同意書 <span class="badge closed">未滿 18 歲必填</span></h3>
+            <p class="preview" style="margin-top:0">請家長（法定代理人）閱讀以下同意書，填寫資料並在框內簽名。</p>
+            <div class="consent-text" id="consent-text"></div>
+            <div class="grid">
+              <div>
+                <label for="g-name">家長（法定代理人）姓名</label>
+                <input id="g-name" maxlength="30" autocomplete="off">
+              </div>
+              <div>
+                <label for="g-rel">與參賽者的關係</label>
+                <select id="g-rel">
+                  <option value="">請選擇</option>
+                  <option>父親</option><option>母親</option><option>法定監護人</option><option>其他</option>
+                </select>
+              </div>
+            </div>
+            <label style="margin-top:14px">家長簽名</label>
+            <div class="sig-wrap">
+              <canvas id="sig-pad" aria-label="簽名欄"></canvas>
+              <span class="sig-hint" id="sig-hint">請用手指在這裡簽名</span>
+            </div>
+            <div class="actions" style="margin-top:8px">
+              <button type="button" class="small secondary" id="sig-clear">清除重簽</button>
+            </div>
+            <label class="agree">
+              <input type="checkbox" id="g-agree">
+              <span>我是參賽者的家長／法定代理人，已閱讀並同意上述同意書。</span>
+            </label>
           </div>
           <div class="actions">
             <button type="submit" id="submit-btn" class="block">送出報名</button>

@@ -46,31 +46,56 @@ insert into categories (competition_id, name, capacity) select id, '限額組', 
 insert into categories (competition_id, name, is_open) select id, '關閉組', false from competitions where slug = 'cup-a';
 insert into categories (competition_id, name) select id, '限額組' from competitions where slug = 'draft';   -- 不同比賽可同名
 insert into categories (competition_id, name) select id, '公開組' from competitions where slug = 'closed';
+-- 比賽在 60 天後；這位選手今天 17 歲、比賽當天已滿 18 歲
+insert into competitions (slug, title, is_published, event_date) values ('youth', '青少年盃', true, current_date + 60);
+insert into categories (competition_id, name) select id, '青少年組' from competitions where slug = 'youth';
 create temp table ids as select
   (select id from competitions where slug = 'cup-a') as cup,
   (select id from competitions where slug = 'draft') as draft,
   (select c.id from categories c join competitions p on p.id = c.competition_id where p.slug = 'cup-a' and c.name = '限額組') as cat_limit,
   (select c.id from categories c join competitions p on p.id = c.competition_id where p.slug = 'cup-a' and c.name = '關閉組') as cat_closed,
   (select c.id from categories c join competitions p on p.id = c.competition_id where p.slug = 'draft') as cat_draft,
-  (select c.id from categories c join competitions p on p.id = c.competition_id where p.slug = 'closed') as cat_comp_closed;
+  (select c.id from categories c join competitions p on p.id = c.competition_id where p.slug = 'closed') as cat_comp_closed,
+  (select c.id from categories c join competitions p on p.id = c.competition_id where p.slug = 'youth') as cat_youth,
+  (current_date + 30 - interval '18 years')::date as turns18_before_event,
+  (current_date - interval '10 years')::date as kid,
+  ('data:image/png;base64,' || repeat('A', 300)) as sig;
 grant select on ids to anon, authenticated;
 select pg_temp.expect_error($$insert into competitions (slug, title) values ('Bad Slug', 'x')$$, 'check');
 select pg_temp.expect_error($$insert into categories (competition_id, name) select cup, '限額組' from ids$$, 'duplicate key');
 
 -- ===== 訪客 =====
 set role anon;
-select pg_temp.check((select array_agg(slug order by id) from competitions) = array['climbing-2026', 'cup-a', 'closed'], '訪客只看到已公開比賽');
+select pg_temp.check((select array_agg(slug order by id) from competitions) = array['climbing-2026', 'cup-a', 'closed', 'youth'], '訪客只看到已公開比賽');
 select pg_temp.check((select count(*) from list_categories((select cup from ids))) = 2, '訪客可讀組別');
 select pg_temp.check((select count(*) from list_categories((select draft from ids))) = 0, '未公開比賽的組別看不到');
 select pg_temp.check((select count(*) from categories where competition_id = (select draft from ids)) = 0, '未公開比賽的組別（直接查表）看不到');
 
-select pg_temp.check((register('王小明', '岩館A', (select cat_limit from ids)) ->> 'display_name') = '王X明', '報名成功');
-select pg_temp.check((register('  李四 ', '', (select cat_limit from ids)) ->> 'display_name') = '李X', '報名會清理空白');
-select pg_temp.expect_error($$select register('張三豐', '', (select cat_limit from ids))$$, '名額已滿');
-select pg_temp.expect_error($$select register('張三豐', '', (select cat_closed from ids))$$, '組別目前不開放');
-select pg_temp.expect_error($$select register('張三豐', '', (select cat_comp_closed from ids))$$, '比賽目前不開放');
-select pg_temp.expect_error($$select register('張三豐', '', (select cat_draft from ids))$$, '找不到');
-select pg_temp.expect_error($$select register('  ', '', (select cat_limit from ids))$$, '請填寫姓名');
+select pg_temp.check((register('王小明', '岩館A', (select cat_limit from ids), '1990-01-01') ->> 'display_name') = '王X明', '報名成功');
+select pg_temp.check((register('  李四 ', '', (select cat_limit from ids), '1990-01-01') ->> 'display_name') = '李X', '報名會清理空白');
+select pg_temp.expect_error($$select register('張三豐', '', (select cat_limit from ids), '1990-01-01')$$, '名額已滿');
+select pg_temp.expect_error($$select register('張三豐', '', (select cat_closed from ids), '1990-01-01')$$, '組別目前不開放');
+select pg_temp.expect_error($$select register('張三豐', '', (select cat_comp_closed from ids), '1990-01-01')$$, '比賽目前不開放');
+select pg_temp.expect_error($$select register('張三豐', '', (select cat_draft from ids), '1990-01-01')$$, '找不到');
+select pg_temp.expect_error($$select register('  ', '', (select cat_limit from ids), '1990-01-01')$$, '請填寫姓名');
+
+-- 出生日期與未成年同意書
+select pg_temp.expect_error($$select register('沒生日', '', (select cat_youth from ids))$$, '請填寫出生日期');
+select pg_temp.expect_error($$select register('未來人', '', (select cat_youth from ids), current_date + 1)$$, '出生日期不正確');
+select pg_temp.check((register('快成年', '', (select cat_youth from ids), (select turns18_before_event from ids)) ->> 'minor')::boolean = false,
+                     '以比賽日期計算年齡（比賽當天已滿 18 歲不需同意書）');
+select pg_temp.expect_error($$select register('小朋友', '', (select cat_youth from ids), (select kid from ids))$$, '未滿 18 歲需由家長');
+select pg_temp.expect_error($$select register('小朋友', '', (select cat_youth from ids), (select kid from ids),
+  '{"name":"小爸","relationship":"父親","agreed":true}')$$, '請家長在簽名欄簽名');
+select pg_temp.expect_error($$select register('小朋友', '', (select cat_youth from ids), (select kid from ids),
+  jsonb_build_object('name','小爸','relationship','父親','signature',(select sig from ids)))$$, '請勾選同意');
+select pg_temp.expect_error($$select register('小朋友', '', (select cat_youth from ids), (select kid from ids),
+  jsonb_build_object('name','小爸','relationship','','signature',(select sig from ids),'agreed',true))$$, '請選擇與參賽者的關係');
+select pg_temp.check((register('小朋友', '', (select cat_youth from ids), (select kid from ids),
+  jsonb_build_object('name',' 小爸 ','relationship','父親','signature',(select sig from ids),'agreed',true)) ->> 'minor')::boolean,
+  '未成年＋家長簽名 → 報名成功');
+select pg_temp.expect_error('select * from guardian_consents', 'permission denied');
+select pg_temp.check((select count(*) from list_public_registrations((select id from competitions where slug = 'youth'))) = 2, '公開名單含未成年選手');
 
 select pg_temp.check((select array_agg(display_name || ':' || payment_status order by id)
                         from list_public_registrations((select cup from ids))) = array['王X明:unpaid', '李X:unpaid'],
@@ -122,11 +147,17 @@ select pg_temp.expect_error($$insert into admins values ('00000000-0000-0000-000
 
 -- ===== 管理員 =====
 set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000001';
-select pg_temp.check((select count(*) from competitions) = 4, '管理員看得到所有比賽');
+select pg_temp.check((select count(*) from competitions) = 5, '管理員看得到所有比賽');
 select pg_temp.check((select count(*) from list_categories((select draft from ids))) = 1, '管理員看得到未公開比賽組別');
 select pg_temp.check((select count(*) from registrations where name = '王小明') = 1, '管理員看得到真實姓名');
 select pg_temp.check((select count(*) from storage.objects) = 1, '管理員看得到截圖');
 select pg_temp.check((select account_last5 from payments where registration_id = (select wang from reg)) = '12345', '管理員看得到繳費資料');
+select pg_temp.check((select g.guardian_name || '/' || g.relationship || '/' || r.birth_date
+                        from guardian_consents g join registrations r on r.id = g.registration_id) = '小爸/父親/' || (select kid from ids),
+                     '管理員看得到家長同意書與生日');
+select pg_temp.check((select consent_text from guardian_consents) = (select minor_consent from competitions where slug = 'youth'), '保存簽署當下的同意書');
+update competitions set minor_consent = '新版同意書' where slug = 'youth';
+select pg_temp.check((select consent_text from guardian_consents) like '%未成年參賽者家長%', '修改同意書不影響已簽署的版本');
 
 select review_payment((select id from payments where registration_id = (select wang from reg)), true, '');
 select pg_temp.check((select payment_status from registrations where id = (select wang from reg)) = 'paid', '確認收款 → 已繳費');

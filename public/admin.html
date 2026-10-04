@@ -127,9 +127,14 @@
             <label for="c-brochure">簡章內容 <span class="hint">（Markdown：# 標題、- 清單、**粗體**、[連結](https://...)）</span></label>
             <textarea id="c-brochure" class="tall" maxlength="50000"></textarea>
           </div>
+          <div style="margin-top:12px">
+            <label for="c-consent">未成年家長同意書 <span class="hint">（比賽當天未滿 18 歲的選手報名時，需家長閱讀並線上簽名；Markdown）</span></label>
+            <textarea id="c-consent" class="tall" maxlength="20000"></textarea>
+          </div>
           <div class="actions">
             <button type="submit" id="comp-save-btn">儲存</button>
             <button type="button" class="secondary" id="brochure-preview-btn">預覽簡章</button>
+            <button type="button" class="secondary" id="consent-preview-btn">預覽同意書</button>
           </div>
           <div class="msg" id="comp-msg"></div>
           <div class="card hidden" id="brochure-preview" style="margin:16px 0 0"></div>
@@ -227,7 +232,9 @@
         <div><label for="r-name">真實姓名</label><input id="r-name" required maxlength="30"><div class="field-hint" id="r-anon"></div></div>
         <div><label for="r-cat">組別</label><select id="r-cat" required></select></div>
         <div><label for="r-team">所屬團體</label><input id="r-team" maxlength="50"></div>
+        <div><label for="r-birth">出生日期</label><input id="r-birth" type="date" min="1900-01-01"><div class="field-hint" id="r-age"></div></div>
       </div>
+      <div class="notice hidden" id="r-consent"></div>
       <div id="r-pay-block">
         <label>繳費狀態</label>
         <div class="seg" id="r-pay-seg"></div>

@@ -106,6 +106,61 @@ function renderCategorySelect() {
   $('submit-btn').disabled = !state.comp.registration_open;
 }
 
+// ---------- 出生日期、家長同意書 ----------
+const birthInput = $('birth');
+const sigPad = createSignaturePad($('sig-pad'), {
+  onChange: (hasInk) => $('sig-hint').classList.toggle('hidden', hasInk),
+});
+birthInput.max = todayStr();
+let consentShown = false;
+
+function refDate() {
+  return state.comp?.event_date || todayStr();
+}
+
+function isMinor() {
+  const age = ageOn(birthInput.value, refDate());
+  return age != null && age < 18;
+}
+
+function updateConsent() {
+  const age = ageOn(birthInput.value, refDate());
+  const minor = age != null && age < 18;
+  const valid = age != null && age >= 0 && age <= 120;
+  $('age-hint').replaceChildren(...(!birthInput.value ? [] : !valid ? ['出生日期不正確'] : [
+    state.comp?.event_date ? `比賽當天 ${age} 歲` : `${age} 歲`,
+    minor ? el('strong', { style: 'color:var(--err)' }, '・未滿 18 歲，需家長同意書（請往下填寫）') : null,
+  ].filter(Boolean)));
+  $('consent-box').classList.toggle('hidden', !(minor && valid));
+  if (minor && valid && !consentShown) {
+    consentShown = true;
+    $('consent-text').replaceChildren(renderMarkdown(state.comp.minor_consent || '（主辦單位尚未提供同意書內容）'));
+    requestAnimationFrame(() => sigPad.setup()); // 顯示後才知道簽名欄大小
+  }
+}
+birthInput.addEventListener('change', updateConsent);
+birthInput.addEventListener('input', updateConsent);
+$('sig-clear').addEventListener('click', () => sigPad.clear());
+
+function resetConsent() {
+  consentShown = false;
+  $('g-name').value = '';
+  $('g-rel').value = '';
+  $('g-agree').checked = false;
+  $('consent-box').classList.add('hidden');
+  $('age-hint').replaceChildren();
+}
+
+function guardianPayload() {
+  if (!isMinor()) return null;
+  const name = $('g-name').value.trim();
+  if (!name) throw new Error('未滿 18 歲需家長同意書：請填寫家長姓名');
+  if (!$('g-rel').value) throw new Error('請選擇家長與參賽者的關係');
+  if (sigPad.isEmpty()) throw new Error('請家長在簽名欄簽名');
+  if (!$('g-agree').checked) throw new Error('請勾選「已閱讀並同意」家長同意書');
+  return { name, relationship: $('g-rel').value, signature: sigPad.toDataURL(), agreed: true };
+}
+
 nameInput.addEventListener('input', () => {
   const v = nameInput.value.trim();
   $('preview').replaceChildren(...(v ? ['名單上會顯示為：', el('strong', {}, anonymizeName(v))] : []));
@@ -119,15 +174,19 @@ $('reg-form').addEventListener('submit', async (e) => {
   $('form-msg').className = 'msg';
   try {
     if (!categorySelect.value) throw new Error('請選擇組別');
+    if (!birthInput.value) throw new Error('請填寫出生日期');
     const name = nameInput.value;
+    const guardian = guardianPayload();
     const result = check(await sb.rpc('register', {
       p_name: name, p_team: teamInput.value, p_category_id: Number(categorySelect.value),
+      p_birth_date: birthInput.value, p_guardian: guardian,
     }));
     const cat = state.categories.find((c) => String(c.id) === categorySelect.value);
     state.lastRegistered = { id: result.id, display_name: result.display_name, category_name: cat?.name ?? '', fullName: name.trim() };
 
     $('reg-done-text').replaceChildren(el('strong', {}, result.display_name), ` 已報名「${cat?.name ?? ''}」`,
-      state.comp.fee ? `，報名費 ${formatMoney(state.comp.fee)}。` : '。');
+      state.comp.fee ? `，報名費 ${formatMoney(state.comp.fee)}。` : '。',
+      result.minor ? el('div', { class: 'muted' }, '✓ 家長同意書已簽署') : null);
     const instr = state.comp.payment_instructions.trim();
     $('reg-done-pay').textContent = instr ? `匯款方式：\n${instr}` : '';
     $('reg-done-pay').classList.toggle('hidden', !instr);
@@ -135,6 +194,8 @@ $('reg-form').addEventListener('submit', async (e) => {
     $('reg-done').classList.remove('hidden');
     window.scrollTo({ top: 0 });
     nameInput.value = '';
+    birthInput.value = '';
+    resetConsent();
     $('preview').replaceChildren();
     await load();
   } catch (err) {
@@ -261,7 +322,7 @@ $('pay-form').addEventListener('submit', async (e) => {
 async function load() {
   if (!state.comp) {
     state.comp = check(await sb.from('competitions')
-      .select('id, slug, title, event_date, location, fee, payment_instructions, brochure, is_published, registration_open')
+      .select('id, slug, title, event_date, location, fee, payment_instructions, brochure, minor_consent, is_published, registration_open')
       .eq('slug', slug).maybeSingle());
     if (!state.comp) {
       $('comp-title').textContent = '';

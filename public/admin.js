@@ -97,11 +97,13 @@ function fillCompForm() {
   $('c-open').checked = c?.registration_open ?? true;
   $('c-payment').value = c?.payment_instructions ?? '';
   $('c-brochure').value = c?.brochure ?? '';
+  $('c-consent').value = c?.minor_consent ?? DEFAULT_CONSENT;
   $('comp-save-btn').textContent = creating ? '建立比賽' : '儲存';
   $('cat-card').classList.toggle('hidden', creating);
   $('danger-card').classList.toggle('hidden', creating || !isOwner());
   $('brochure-preview').classList.add('hidden');
   $('brochure-preview-btn').textContent = '預覽簡章';
+  $('consent-preview-btn').textContent = '預覽同意書';
   document.querySelectorAll('#bottom-nav a').forEach((a) => {
     a.style.visibility = creating && !['settings', 'account'].includes(a.dataset.view) ? 'hidden' : '';
   });
@@ -114,13 +116,20 @@ function updateSlugHint() {
 }
 $('c-slug').addEventListener('input', updateSlugHint);
 
-$('brochure-preview-btn').addEventListener('click', () => {
+// 預覽簡章／同意書（共用同一個預覽框）
+let previewing = null;
+function togglePreview(kind) {
   const box = $('brochure-preview');
-  const show = box.classList.contains('hidden');
-  box.replaceChildren(renderMarkdown($('c-brochure').value || '（簡章是空的）'));
+  const show = previewing !== kind;
+  previewing = show ? kind : null;
+  const text = kind === 'brochure' ? $('c-brochure').value || '（簡章是空的）' : $('c-consent').value || '（同意書是空的）';
+  box.replaceChildren(renderMarkdown(text));
   box.classList.toggle('hidden', !show);
-  $('brochure-preview-btn').textContent = show ? '關閉預覽' : '預覽簡章';
-});
+  $('brochure-preview-btn').textContent = previewing === 'brochure' ? '關閉預覽' : '預覽簡章';
+  $('consent-preview-btn').textContent = previewing === 'consent' ? '關閉預覽' : '預覽同意書';
+}
+$('brochure-preview-btn').addEventListener('click', () => togglePreview('brochure'));
+$('consent-preview-btn').addEventListener('click', () => togglePreview('consent'));
 
 $('comp-form').addEventListener('submit', (e) => {
   e.preventDefault();
@@ -135,6 +144,7 @@ $('comp-form').addEventListener('submit', (e) => {
       registration_open: $('c-open').checked,
       payment_instructions: $('c-payment').value.trim(),
       brochure: $('c-brochure').value,
+      minor_consent: $('c-consent').value.trim(),
     };
     if (state.compId == null) {
       const created = check(await sb.from('competitions').insert(row).select('id').single());
@@ -263,12 +273,75 @@ $('copy-url-btn').addEventListener('click', async () => {
 // =====================================================================
 // 報名名單
 // =====================================================================
+// ---------- 年齡、家長同意書 ----------
+const DEFAULT_CONSENT = `## 未成年參賽者家長（法定代理人）同意書
+
+本人為參賽者之家長／法定代理人，已詳閱本次比賽簡章及相關規定，瞭解攀岩運動具有一定之風險，並同意本人之子女（受監護人）參加本次比賽：
+
+1. 參賽者身體狀況良好，無不適合從事攀岩運動之疾病。
+2. 參賽者將遵守主辦單位及現場工作人員之指示與安全規範。
+3. 如因個人疏忽或未遵守規定而發生意外，將自行負責。
+4. 同意主辦單位於比賽期間拍攝之照片、影片用於活動紀錄與宣傳。`;
+
+const refDate = () => currentComp()?.event_date || todayStr();
+const isMinorReg = (r) => r.age != null && r.age < 18;
+
+function minorBadge(r) {
+  if (!isMinorReg(r)) return null;
+  return el('div', { style: 'margin-top:2px' },
+    el('span', { class: 'badge full' }, `未成年 ${r.age} 歲`), ' ',
+    r.consent ? el('span', { class: 'badge ok' }, '✓ 家長已簽') : el('span', { class: 'badge closed' }, '缺家長同意書'));
+}
+
+function updateRegAge() {
+  const age = ageOn($('r-birth').value, refDate());
+  $('r-age').textContent = age == null ? '' : `比賽當天 ${age} 歲${age < 18 ? '（未成年）' : ''}`;
+}
+$('r-birth').addEventListener('input', updateRegAge);
+
+function renderConsentInfo(r) {
+  const box = $('r-consent');
+  const c = r.consent;
+  if (!c && !isMinorReg(r)) { box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+  if (!c) {
+    box.replaceChildren(el('strong', { style: 'color:var(--err)' }, '⚠ 未成年，尚未簽署家長同意書'),
+      el('div', { class: 'muted' }, '可請家長於報到時簽署紙本同意書。'));
+    return;
+  }
+  const detail = el('div');
+  box.replaceChildren(
+    el('div', { style: 'font-weight:700' }, '👪 家長同意書'),
+    el('div', {}, `${c.guardian_name}（${c.relationship}）`),
+    el('div', { class: 'muted' }, `簽署時間：${formatTime(c.signed_at)}`),
+    detail,
+    el('button', { type: 'button', class: 'small secondary', style: 'margin-top:8px', onclick: async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try {
+        const full = check(await sb.from('guardian_consents').select('signature, consent_text').eq('id', c.id).single());
+        detail.replaceChildren(
+          el('div', { class: 'k', style: 'margin-top:8px' }, '家長簽名'),
+          el('img', { class: 'sig-img', src: full.signature, alt: '家長簽名' }),
+          el('details', { style: 'margin-top:8px' },
+            el('summary', {}, '簽署當下的同意書全文'),
+            el('div', { class: 'consent-text', style: 'margin-top:8px' }, renderMarkdown(full.consent_text))));
+        btn.remove();
+      } catch (err) {
+        btn.disabled = false;
+        showMsg($('reg-msg'), err.message, 'err');
+      }
+    } }, '查看簽名與同意書'),
+  );
+}
+
 function regItem(r) {
   return el('div', { class: 'reg-item', role: 'button', tabindex: 0, onclick: () => openReg(r),
     onkeydown: (e) => { if (e.key === 'Enter') openReg(r); } },
   el('div', { class: 'who' },
     el('div', { class: 'name' }, r.name, el('span', { class: 'muted', style: 'font-weight:400' }, `　${r.display_name}`)),
-    el('div', { class: 'sub' }, [r.category_name, r.team, formatTime(r.created_at)].filter(Boolean).join('・'))),
+    el('div', { class: 'sub' }, [r.category_name, r.team, formatTime(r.created_at)].filter(Boolean).join('・')),
+    minorBadge(r)),
   payBadge(r.payment_status),
   el('span', { class: 'chev' }, '›'));
 }
@@ -319,6 +392,9 @@ function openReg(r) {
   $('reg-dlg-title').textContent = creating ? '代為報名' : r.name;
   $('r-name').value = r.name ?? '';
   $('r-team').value = r.team ?? '';
+  $('r-birth').value = r.birth_date ?? '';
+  updateRegAge();
+  renderConsentInfo(r);
   $('r-cat').replaceChildren(...state.categories.map((c) =>
     el('option', { value: c.id, selected: c.id === r.category_id }, c.name + (c.is_open ? '' : '（已關閉）'))));
   $('r-anon').textContent = r.name ? `公開顯示：${anonymizeName(r.name)}` : '';
@@ -358,7 +434,10 @@ $('reg-form').addEventListener('submit', (e) => {
   e.preventDefault();
   guard($('reg-msg'), async () => {
     const r = state.editing;
-    const row = { name: $('r-name').value.trim(), team: $('r-team').value.trim(), category_id: Number($('r-cat').value) };
+    const row = {
+      name: $('r-name').value.trim(), team: $('r-team').value.trim(), category_id: Number($('r-cat').value),
+      birth_date: $('r-birth').value || null,
+    };
     if (!row.name) throw new Error('請填寫姓名');
     if (!r.id) {
       check(await sb.from('registrations').insert(row));
@@ -398,11 +477,13 @@ function csvCell(v) {
 
 $('export-btn').addEventListener('click', () => {
   const comp = currentComp();
-  const rows = [['編號', '組別', '姓名', '匿名顯示', '所屬團體', '繳費狀態', '帳號後五碼', '匯款金額', '匯款日期', '報名時間']];
+  const rows = [['編號', '組別', '姓名', '匿名顯示', '所屬團體', '出生日期', '比賽當天年齡', '家長姓名', '家長關係', '同意書簽署時間',
+    '繳費狀態', '帳號後五碼', '匯款金額', '匯款日期', '報名時間']];
   for (const r of state.registrations) {
     const p = [...r.payments].sort((a, b) => b.id - a.id)[0];
-    rows.push([r.id, r.category_name, r.name, r.display_name, r.team, PAY_LABEL[r.payment_status],
-      p?.account_last5, p?.amount, p?.paid_on, formatTime(r.created_at)]);
+    rows.push([r.id, r.category_name, r.name, r.display_name, r.team, r.birth_date, r.age,
+      r.consent?.guardian_name, r.consent?.relationship, r.consent ? formatTime(r.consent.signed_at) : '',
+      PAY_LABEL[r.payment_status], p?.account_last5, p?.amount, p?.paid_on, formatTime(r.created_at)]);
   }
   const csv = '﻿' + rows.map((row) => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
   const a = el('a', {
@@ -650,8 +731,9 @@ async function loadDetail() {
   const [categories, registrations] = await Promise.all([
     sb.rpc('list_categories', { p_competition_id: state.compId }).then(check),
     sb.from('registrations')
-      .select(`id, name, team, category_id, payment_status, created_at,
+      .select(`id, name, team, category_id, payment_status, created_at, birth_date,
                categories!inner(name, sort_order, competition_id),
+               guardian_consents(id, guardian_name, relationship, signed_at),
                payments(id, account_last5, amount, paid_on, note, proof_path, status, admin_note, created_at)`)
       .eq('categories.competition_id', state.compId)
       .then(check),
@@ -664,6 +746,8 @@ async function loadDetail() {
       sort: r.categories?.sort_order ?? 0,
       display_name: anonymizeName(r.name),
       payments: r.payments ?? [],
+      consent: (Array.isArray(r.guardian_consents) ? r.guardian_consents[0] : r.guardian_consents) ?? null,
+      age: ageOn(r.birth_date, refDate()),
     }))
     .sort((a, b) => a.sort - b.sort || a.category_id - b.category_id || a.id - b.id);
   if (state.catFilter !== 'all' && !categories.some((c) => String(c.id) === state.catFilter)) state.catFilter = 'all';

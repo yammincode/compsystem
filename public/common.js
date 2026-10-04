@@ -144,3 +144,90 @@ async function applySite() {
   document.body.append(footer);
   return site;
 }
+
+// ---------- 年齡 ----------
+function todayStr() {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+// 以 ref 日期計算足歲（與資料庫 age_on() 相同）
+function ageOn(birth, ref = todayStr()) {
+  if (!birth) return null;
+  const [by, bm, bd] = birth.split('-').map(Number);
+  const [ry, rm, rd] = ref.split('-').map(Number);
+  let age = ry - by;
+  if (rm < bm || (rm === bm && rd < bd)) age -= 1;
+  return age;
+}
+
+// ---------- 手寫簽名板 ----------
+function createSignaturePad(canvas, { onChange } = {}) {
+  const ctx = canvas.getContext('2d');
+  let drawing = false;
+  let points = 0;
+  let last = null;
+
+  function setup() {
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.lineWidth = 2.6;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#111';
+    points = 0;
+    onChange?.(false);
+  }
+
+  const pos = (e) => {
+    const r = canvas.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+  canvas.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    canvas.setPointerCapture(e.pointerId);
+    drawing = true;
+    last = pos(e);
+    ctx.beginPath();
+    ctx.arc(last.x, last.y, 1.2, 0, Math.PI * 2);
+    ctx.fillStyle = '#111';
+    ctx.fill();
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!drawing) return;
+    e.preventDefault();
+    const p = pos(e);
+    ctx.beginPath();
+    ctx.moveTo(last.x, last.y);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    last = p;
+    points += 1;
+    if (points === 1) onChange?.(true);
+  });
+  const end = () => { drawing = false; };
+  canvas.addEventListener('pointerup', end);
+  canvas.addEventListener('pointercancel', end);
+
+  return {
+    setup,
+    clear: setup,
+    // 筆畫太少視為沒簽
+    isEmpty: () => points < 8,
+    // 輸出白底 PNG（寬 600px），檔案小、在深色模式也看得清楚
+    toDataURL() {
+      const out = document.createElement('canvas');
+      out.width = 600;
+      out.height = Math.round(600 * (canvas.height / canvas.width));
+      const o = out.getContext('2d');
+      o.fillStyle = '#fff';
+      o.fillRect(0, 0, out.width, out.height);
+      o.drawImage(canvas, 0, 0, out.width, out.height);
+      return out.toDataURL('image/png');
+    },
+  };
+}

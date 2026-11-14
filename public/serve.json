@@ -1,3 +1,6 @@
 {
-  "rewrites": [{ "source": "/c/**", "destination": "/competition.html" }]
+  "rewrites": [
+    { "source": "/c/**", "destination": "/competition.html" },
+    { "source": "/s/**", "destination": "/series.html" }
+  ]
 }

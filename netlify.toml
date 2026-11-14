@@ -24,6 +24,12 @@
   to = "/competition.html"
   status = 200
 
+# 系列賽頁：/s/<系列賽代碼>、/s/<系列賽代碼>/register
+[[redirects]]
+  from = "/s/*"
+  to = "/series.html"
+  status = 200
+
 # 第一版的成績頁網址
 [[redirects]]
   from = "/results"

@@ -217,4 +217,72 @@ set role service_role;
 select pg_temp.check(user_id_by_email('Owner@X.com') = '00000000-0000-0000-0000-000000000001', 'service_role 依 Email 查帳號');
 reset role;
 
+
+-- ===== 系列賽與套票 =====
+insert into series (slug, title, package_fee, is_published) values ('origin-2026', '原岩系列賽', 5000, true);
+insert into series (slug, title, package_fee, is_published) values ('hidden-series', '未公開系列', 5000, false);
+insert into series (slug, title, is_published) values ('no-package', '不賣套票', true);
+insert into competitions (slug, title, is_published, fee, event_date, series_id, series_order)
+  select 's1', '第一站', true, 1500, current_date + 30, id, 1 from series where slug = 'origin-2026';
+insert into competitions (slug, title, is_published, fee, event_date, series_id, series_order)
+  select 's2', '第二站', true, 1500, current_date + 60, id, 2 from series where slug = 'origin-2026';
+insert into competitions (slug, title, is_published, series_id) select 'np1', '單場一', true, id from series where slug = 'no-package';
+insert into competitions (slug, title, is_published, series_id) select 'np2', '單場二', true, id from series where slug = 'no-package';
+insert into categories (competition_id, name, grade_min, grade_max) select id, 'B 中年級組', 4, 5 from competitions where slug in ('s1', 's2');
+insert into categories (competition_id, name, grade_min, grade_max) select id, 'E 高中組', 10, 12 from competitions where slug in ('s1', 's2');
+select pg_temp.expect_error($$insert into categories (competition_id, name, grade_min, grade_max) select id, '錯誤年級', 6, 3 from competitions where slug = 's1'$$, 'check');
+create temp table sids as select
+  (select id from series where slug = 'origin-2026') as series,
+  (select id from series where slug = 'no-package') as nopkg,
+  (select c.id from categories c join competitions p on p.id = c.competition_id where p.slug = 's1' and c.name = 'B 中年級組') as s1b,
+  (select c.id from categories c join competitions p on p.id = c.competition_id where p.slug = 's2' and c.name = 'B 中年級組') as s2b,
+  (select c.id from categories c join competitions p on p.id = c.competition_id where p.slug = 's1' and c.name = 'E 高中組') as s1e,
+  (current_date - interval '10 years')::date as kid,
+  ('data:image/png;base64,' || repeat('A', 300)) as sig;
+grant select on sids to anon, authenticated;
+
+set role anon;
+select pg_temp.check((select array_agg(slug order by id) from series) = array['origin-2026', 'no-package'], '訪客只看到已公開系列賽');
+select pg_temp.check((select grade_min || '-' || grade_max from list_categories((select id from competitions where slug = 's1')) where name = 'B 中年級組') = '4-5', '組別回傳年級範圍');
+select pg_temp.expect_error('select * from packages', 'permission denied');
+select pg_temp.expect_error($$select register_package((select nopkg from sids), '套票人', '', array[1,2]::bigint[], '1990-01-01')$$, '不開放套票');
+select pg_temp.expect_error($$select register_package((select series from sids), '套票人', '', array[(select s1b from sids)], '1990-01-01')$$, '請選擇「第二站」的組別');
+select pg_temp.expect_error($$select register_package((select series from sids), '套票人', '', array[(select s1b from sids), (select s1e from sids)], '1990-01-01')$$, '請選擇「第二站」的組別');
+select pg_temp.expect_error($$select register_package((select series from sids), '小套票', '', array[(select s1b from sids), (select s2b from sids)], (select kid from sids))$$, '未滿 18 歲需由家長');
+create temp table pkg as select register_package((select series from sids), '陳小華', '原岩', array[(select s1b from sids), (select s2b from sids)], (select kid from sids),
+  jsonb_build_object('name','陳媽','relationship','母親','signature',(select sig from sids),'agreed',true)) as j;
+grant select on pkg to authenticated;
+select pg_temp.check((select (j ->> 'display_name') = '陳X華' and (j ->> 'minor')::boolean and (j ->> 'fee')::int = 5000 from pkg), '套票報名成功');
+select pg_temp.check((select count(*) from list_public_registrations((select id from competitions where slug = 's1')) where is_package) = 1
+                 and (select count(*) from list_public_registrations((select id from competitions where slug = 's2')) where is_package) = 1, '套票在兩場名單都出現並標示套票');
+select pg_temp.expect_error($$select register_package((select series from sids), '陳小華', '原岩', array[(select s1b from sids), (select s2b from sids)], (select kid from sids),
+  jsonb_build_object('name','陳媽','relationship','母親','signature',(select sig from sids),'agreed',true))$$, '已經報名過');
+-- 從第二場送出繳費：整組變審核中
+select submit_payment(((select j from pkg) -> 'registration_ids' ->> 1)::bigint, '陳小華', '22222', 5000, current_date);
+select pg_temp.check((select array_agg(payment_status) from list_public_registrations((select id from competitions where slug in ('s1'))) where is_package) = array['pending']
+                 and (select array_agg(payment_status) from list_public_registrations((select id from competitions where slug in ('s2'))) where is_package) = array['pending'], '套票送出繳費 → 兩場都審核中');
+select pg_temp.expect_error($$select submit_payment(((select j from pkg) ->> 'lead_id')::bigint, '陳小華', '22222', 5000, current_date)$$, '已經送出過');
+-- 第二組套票：之後用來測退回
+create temp table pkg2 as select register_package((select series from sids), '林大同', '', array[(select s1e from sids), (select id from categories where name = 'E 高中組' and competition_id = (select id from competitions where slug = 's2'))], '1990-01-01') as j;
+grant select on pkg2 to authenticated;
+select submit_payment(((select j from pkg2) ->> 'lead_id')::bigint, '林大同', '33333', 5000, current_date);
+-- 關閉其中一場就不能買套票
+reset role;
+update competitions set registration_open = false where slug = 's2';
+set role anon;
+select pg_temp.expect_error($$select register_package((select series from sids), '晚來的', '', array[(select s1b from sids), (select s2b from sids)], '1990-01-01')$$, '不開放報名，無法購買套票');
+reset role;
+update competitions set registration_open = true where slug = 's2';
+
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000001';
+select pg_temp.check((select count(*) from payments p where p.registration_id = ((select j from pkg) ->> 'lead_id')::bigint) = 1, '套票繳費資料掛在第一場');
+select review_payment((select id from payments where registration_id = ((select j from pkg) ->> 'lead_id')::bigint), true, '');
+select pg_temp.check((select array_agg(payment_status) from registrations where package_id = ((select j from pkg) ->> 'package_id')::bigint) = array['paid', 'paid'], '確認收款 → 套票兩場都已繳費');
+select review_payment((select id from payments where registration_id = ((select j from pkg2) ->> 'lead_id')::bigint), false, '金額不符');
+select pg_temp.check((select array_agg(payment_status) from registrations where package_id = ((select j from pkg2) ->> 'package_id')::bigint) = array['unpaid', 'unpaid'], '退回 → 套票兩場都未繳費');
+select pg_temp.check((select count(*) from packages) = 2, '管理員看得到套票');
+insert into series (slug, title) values ('staff-series', '工作人員建的系列');
+reset role;
+
 \echo 'ALL TESTS PASSED'

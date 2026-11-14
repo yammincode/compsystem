@@ -83,6 +83,9 @@ on conflict (id) do update
 drop function if exists public.list_categories();
 drop function if exists public.list_public_registrations();
 drop function if exists public.register(text, text, bigint);
+-- 之後的版本會改回傳欄位；重新執行這份時先刪掉，避免「cannot change return type」
+drop function if exists public.list_categories(bigint);
+drop function if exists public.list_public_registrations(bigint);
 
 -- 比賽是否對目前使用者可見（已公開，或是管理員）
 create or replace function public.competition_visible(p_competition_id bigint)

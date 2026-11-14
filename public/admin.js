@@ -9,6 +9,8 @@ const state = {
   user: null,
   role: null,
   competitions: [],
+  series: [],
+  seriesEditing: null, // 系列賽表單：null = 關閉，{} = 新增
   compId: null,        // null = 新增比賽中
   categories: [],
   registrations: [],
@@ -85,6 +87,20 @@ $('new-comp-btn').addEventListener('click', () => {
   $('c-title').focus();
 });
 
+// 年級下拉選單：空白 = 不限
+function gradeOptions(selected) {
+  return [el('option', { value: '' }, '不限'),
+    ...Array.from({ length: 12 }, (_, i) => el('option', { value: i + 1, selected: selected === i + 1 }, gradeLabel(i + 1)))];
+}
+const gradeVal = (sel) => (sel.value === '' ? null : Number(sel.value));
+$('cat-gmin').replaceChildren(...gradeOptions(null));
+$('cat-gmax').replaceChildren(...gradeOptions(null));
+
+function renderSeriesSelect(selected) {
+  $('c-series').replaceChildren(el('option', { value: '' }, '不屬於系列賽'),
+    ...state.series.map((se) => el('option', { value: se.id, selected: se.id === selected }, se.title)));
+}
+
 function fillCompForm() {
   const c = currentComp();
   const creating = !c;
@@ -99,6 +115,8 @@ function fillCompForm() {
   $('c-payment').value = c?.payment_instructions ?? '';
   $('c-brochure').value = c?.brochure ?? '';
   $('c-consent').value = c?.minor_consent ?? DEFAULT_CONSENT;
+  renderSeriesSelect(c?.series_id ?? null);
+  $('c-series-order').value = c?.series_order ?? '';
   $('comp-save-btn').textContent = creating ? '建立比賽' : '儲存';
   $('cat-card').classList.toggle('hidden', creating);
   $('danger-card').classList.toggle('hidden', creating || !isOwner());
@@ -146,6 +164,8 @@ $('comp-form').addEventListener('submit', (e) => {
       payment_instructions: $('c-payment').value.trim(),
       brochure: $('c-brochure').value,
       minor_consent: $('c-consent').value.trim(),
+      series_id: $('c-series').value ? Number($('c-series').value) : null,
+      series_order: Number($('c-series-order').value || 0),
     };
     if (state.compId == null) {
       const created = check(await sb.from('competitions').insert(row).select('id').single());
@@ -184,9 +204,13 @@ function renderCategories() {
     const cap = el('input', { type: 'number', inputmode: 'numeric', min: 1, value: c.capacity ?? '', placeholder: '人數上限：不限', 'aria-label': '人數上限' });
     const sort = el('input', { type: 'number', inputmode: 'numeric', value: c.sort_order ?? 0, 'aria-label': '排序', title: '排序（數字小的在前）' });
     const open = el('input', { type: 'checkbox', checked: c.is_open });
+    const gmin = el('select', { 'aria-label': '最低年級' }, ...gradeOptions(c.grade_min));
+    const gmax = el('select', { 'aria-label': '最高年級' }, ...gradeOptions(c.grade_max));
     return el('div', { class: 'cat-edit' },
       el('div', { class: 'grid' }, name, desc,
-        el('div', { class: 'grid', style: 'grid-template-columns:2fr 1fr' }, cap, sort)),
+        el('div', { class: 'grid', style: 'grid-template-columns:2fr 1fr' }, cap, sort),
+        el('div', {}, el('div', { class: 'muted', style: 'font-size:.82rem;margin-bottom:4px' }, '年級範圍（自動分組用）'),
+          el('div', { class: 'grid', style: 'grid-template-columns:1fr 1fr' }, gmin, gmax))),
       el('div', { class: 'actions', style: 'margin-top:10px' },
         el('label', { class: 'check-row', style: 'margin:0;display:flex;align-items:center;gap:8px;font-weight:500' }, open, '開放報名'),
         el('span', { class: 'muted' }, `已報名 ${c.count}`),
@@ -196,6 +220,7 @@ function renderCategories() {
             name: name.value.trim(), description: desc.value.trim(),
             capacity: cap.value ? Number(cap.value) : null,
             is_open: open.checked, sort_order: Number(sort.value || 0),
+            grade_min: gradeVal(gmin), grade_max: gradeVal(gmax),
           }).eq('id', c.id).select('id').single());
           showMsg($('cat-msg'), `已儲存「${name.value}」`, 'ok');
           await loadDetail();
@@ -219,9 +244,12 @@ $('cat-form').addEventListener('submit', (e) => {
       name: $('cat-name').value.trim(), description: $('cat-desc').value.trim(),
       capacity: $('cat-cap').value ? Number($('cat-cap').value) : null,
       sort_order: maxSort + 1, is_open: true,
+      grade_min: gradeVal($('cat-gmin')), grade_max: gradeVal($('cat-gmax')),
     }));
     showMsg($('cat-msg'), `已新增「${$('cat-name').value}」`, 'ok');
     e.target.reset();
+    $('cat-gmin').value = '';
+    $('cat-gmax').value = '';
     await loadDetail();
   });
 });
@@ -347,7 +375,8 @@ function regItem(r) {
   return el('div', { class: 'reg-item', role: 'button', tabindex: 0, onclick: () => openReg(r),
     onkeydown: (e) => { if (e.key === 'Enter') openReg(r); } },
   el('div', { class: 'who' },
-    el('div', { class: 'name' }, r.name, el('span', { class: 'muted', style: 'font-weight:400' }, `　${r.display_name}`)),
+    el('div', { class: 'name' }, r.name, el('span', { class: 'muted', style: 'font-weight:400' }, `　${r.display_name}`),
+      r.package_id ? el('span', { class: 'pkg-badge' }, '套票') : null),
     el('div', { class: 'sub' }, [r.category_name, r.team, formatTime(r.created_at)].filter(Boolean).join('・')),
     minorBadge(r)),
   payBadge(r.payment_status),
@@ -469,9 +498,12 @@ function renderRegPayment(r) {
     }),
   }, label)));
   const history = [...r.payments].sort((a, b) => b.id - a.id);
-  $('r-history').replaceChildren(...(history.length
+  const pkgNote = r.package_id && !history.length
+    ? el('p', { class: 'notice' }, '套票報名：繳費資料統一放在套票的第一場，請切換到第一場的比賽審核；確認後所有場次會一起變成已繳費。')
+    : null;
+  $('r-history').replaceChildren(pkgNote ?? '', ...(history.length
     ? history.map((p) => paymentCard(r, p, { compact: true }))
-    : [el('p', { class: 'muted' }, '選手尚未送出繳費資訊')]));
+    : pkgNote ? [] : [el('p', { class: 'muted' }, '選手尚未送出繳費資訊')]));
 }
 
 $('r-name').addEventListener('input', () => {
@@ -565,13 +597,14 @@ async function showProof(path, holder, btn) {
 
 function paymentCard(r, p, { compact = false } = {}) {
   const STATUS = { pending: ['待審核', 'pending'], approved: ['已確認', 'paid'], rejected: ['已退回', 'unpaid'] };
-  const fee = currentComp()?.fee;
+  const pkgSeries = r.package_id ? state.series.find((se) => se.id === currentComp()?.series_id) : null;
+  const fee = pkgSeries ? pkgSeries.package_fee : currentComp()?.fee;
   const proofHolder = el('div');
   const kv = (k, v, extra) => el('div', {}, el('div', { class: 'k' }, k), el('div', { class: 'v' }, v, extra ?? null));
   return el('div', { class: 'pay-card' },
     el('div', { class: 'head' },
       el('div', { class: 'who' },
-        compact ? null : el('div', { style: 'font-weight:700' }, r.name),
+        compact ? null : el('div', { style: 'font-weight:700' }, r.name, r.package_id ? el('span', { class: 'pkg-badge' }, '套票') : null),
         compact ? null : el('div', { class: 'muted' }, [r.category_name, r.team].filter(Boolean).join('・'))),
       el('span', { class: `pay ${STATUS[p.status][1]}` }, STATUS[p.status][0])),
     el('div', { class: 'kv' },
@@ -669,6 +702,84 @@ async function staffApi(body) {
   }
   return out;
 }
+
+// ---------- 系列賽 ----------
+function renderSeriesList() {
+  $('series-list').replaceChildren(...(state.series.length ? state.series.map((se) => {
+    const comps = state.competitions.filter((c) => c.series_id === se.id)
+      .sort((a, b) => a.series_order - b.series_order || a.id - b.id);
+    return el('div', { class: 'staff-item' },
+      el('div', { class: 'who' },
+        el('div', { style: 'font-weight:700' }, se.title, se.is_published ? '' : el('span', { class: 'badge full', style: 'margin-left:6px' }, '未公開')),
+        el('div', { class: 'muted' }, [
+          se.package_fee != null ? `套票 ${formatMoney(se.package_fee)}${se.package_open ? '' : '（暫停）'}` : '不賣套票',
+          comps.length ? comps.map((c) => c.title).join(' → ') : '還沒有比賽加入',
+        ].join('・')),
+        el('a', { href: `/s/${se.slug}`, target: '_blank', class: 'muted' }, `/s/${se.slug} ↗`)),
+      el('button', { type: 'button', class: 'small secondary', onclick: () => openSeriesForm(se) }, '編輯'));
+  }) : [el('p', { class: 'muted' }, '還沒有系列賽')]));
+}
+
+function openSeriesForm(se) {
+  state.seriesEditing = se;
+  const creating = !se.id;
+  $('series-form-title').textContent = creating ? '新系列賽' : `編輯「${se.title}」`;
+  $('se-title').value = se.title ?? '';
+  $('se-slug').value = se.slug ?? '';
+  $('se-tagline').value = se.tagline ?? '';
+  $('se-fee').value = se.package_fee ?? '';
+  $('se-published').checked = se.is_published ?? false;
+  $('se-open').checked = se.package_open ?? true;
+  $('se-payment').value = se.payment_instructions ?? '';
+  $('se-intro').value = se.intro ?? '';
+  $('se-save').textContent = creating ? '建立系列賽' : '儲存';
+  $('se-delete').classList.toggle('hidden', creating || !isOwner());
+  $('series-form').classList.remove('hidden');
+  updateSeriesSlugHint();
+  $('se-title').focus();
+}
+function updateSeriesSlugHint() {
+  const v = $('se-slug').value.trim();
+  $('se-slug-hint').textContent = v ? `系列賽網址：${location.origin}/s/${v}` : '';
+}
+$('se-slug').addEventListener('input', updateSeriesSlugHint);
+$('new-series-btn').addEventListener('click', () => openSeriesForm({}));
+$('se-cancel').addEventListener('click', () => { $('series-form').classList.add('hidden'); state.seriesEditing = null; });
+
+$('series-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  guard($('series-msg'), async () => {
+    const se = state.seriesEditing;
+    const row = {
+      title: $('se-title').value.trim(),
+      slug: $('se-slug').value.trim().toLowerCase(),
+      tagline: $('se-tagline').value.trim(),
+      package_fee: $('se-fee').value === '' ? null : Number($('se-fee').value),
+      is_published: $('se-published').checked,
+      package_open: $('se-open').checked,
+      payment_instructions: $('se-payment').value.trim(),
+      intro: $('se-intro').value,
+    };
+    if (!se.id) check(await sb.from('series').insert(row).select('id').single());
+    else check(await sb.from('series').update(row).eq('id', se.id).select('id').single());
+    $('series-form').classList.add('hidden');
+    state.seriesEditing = null;
+    await loadCompetitions();
+    showMsg($('series-msg'), `已儲存「${row.title}」`, 'ok');
+  });
+});
+
+$('se-delete').addEventListener('click', () => guard($('series-msg'), async () => {
+  const se = state.seriesEditing;
+  if (!se?.id) return;
+  if (!confirm(`確定刪除系列賽「${se.title}」？比賽本身不會被刪除，只會脫離系列賽。已售出的套票會無法刪除系列賽。`)) return;
+  const deleted = check(await sb.from('series').delete().eq('id', se.id).select('id'));
+  if (!deleted.length) throw new Error('只有管理員可以刪除系列賽');
+  $('series-form').classList.add('hidden');
+  state.seriesEditing = null;
+  await loadCompetitions();
+  showMsg($('series-msg'), `已刪除「${se.title}」`, 'ok');
+}));
 
 // ---------- 網站設定 ----------
 async function loadSiteForm() {
@@ -780,7 +891,7 @@ async function loadDetail() {
   const [categories, registrations] = await Promise.all([
     sb.rpc('list_categories', { p_competition_id: state.compId }).then(check),
     sb.from('registrations')
-      .select(`id, name, team, category_id, payment_status, created_at, birth_date,
+      .select(`id, name, team, category_id, payment_status, created_at, birth_date, package_id,
                categories!inner(name, sort_order, competition_id),
                guardian_consents(id, guardian_name, relationship, signed_at),
                payments(id, account_last5, amount, paid_on, note, proof_path, status, admin_note, created_at)`)
@@ -819,8 +930,14 @@ async function selectComp(id) {
 }
 
 async function loadCompetitions() {
-  state.competitions = check(await sb.from('competitions').select('*')
-    .order('event_date', { ascending: false, nullsFirst: false }).order('id', { ascending: false }));
+  const [comps, series] = await Promise.all([
+    sb.from('competitions').select('*')
+      .order('event_date', { ascending: false, nullsFirst: false }).order('id', { ascending: false }).then(check),
+    sb.from('series').select('*').order('id', { ascending: false }).then(check),
+  ]);
+  state.competitions = comps;
+  state.series = series;
+  renderSeriesList();
   let id = state.compId;
   if (id == null || !state.competitions.some((c) => c.id === id)) {
     let saved = null;

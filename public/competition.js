@@ -14,6 +14,7 @@ const state = {
   search: '',
   payTarget: null, // { id, display_name, category_name }
   lastRegistered: null,
+  series: null,
 };
 
 // ---------- 分頁切換 ----------
@@ -80,7 +81,8 @@ function renderInfo() {
       return el('li', {},
         el('div', { class: 'who' },
           el('div', { style: 'font-weight:600' }, cat.name),
-          cat.description ? el('div', { class: 'muted' }, cat.description) : null),
+          (cat.grade_min != null || cat.grade_max != null || cat.description)
+            ? el('div', { class: 'muted' }, [gradeRangeLabel(cat.grade_min, cat.grade_max), cat.description].filter(Boolean).join('・')) : null),
         el('span', { class: 'muted' }, cat.capacity != null ? `${cat.count}/${cat.capacity}` : `${cat.count} 人`),
         el('span', { class: `badge ${s.cls}` }, s.text));
     })
@@ -98,12 +100,50 @@ function renderCategorySelect() {
     state.comp.registration_open ? '請選擇組別' : '這場比賽目前不開放報名'));
   for (const c of state.categories) {
     const s = categoryStatus(c, state.comp.registration_open);
-    const label = c.description ? `${c.name}（${c.description}）` : c.name;
+    const range = gradeRangeLabel(c.grade_min, c.grade_max);
+    const extra = [range, c.description].filter(Boolean).join('，');
+    const label = extra ? `${c.name}（${extra}）` : c.name;
     categorySelect.append(el('option', { value: c.id, disabled: !s.available },
       s.available ? label : `${label} — ${s.text}`));
   }
   if ([...categorySelect.options].some((o) => o.value === current && !o.disabled)) categorySelect.value = current;
   $('submit-btn').disabled = !state.comp.registration_open;
+}
+
+// 這場屬於系列賽且有套票：提示改買套票
+function renderSeriesBanner() {
+  document.querySelectorAll('.series-banner').forEach((b) => b.remove());
+  const se = state.series;
+  if (!se) return;
+  const comps = state.seriesComps ?? [];
+  const pkg = packageInfo(se, comps);
+  const mk = () => el('div', { class: 'banner series-banner' },
+    el('span', {}, `這場是「${se.title}」的其中一站。`,
+      pkg.available ? el('strong', {}, ` ${comps.length} 場套票 ${formatMoney(pkg.fee)}${pkg.saving > 0 ? `，省 ${formatMoney(pkg.saving)}` : ''}`) : null),
+    el('span', { class: 'spacer' }),
+    el('a', { class: 'btn small', href: pkg.available ? `/s/${se.slug}/register` : `/s/${se.slug}` },
+      pkg.available ? '改買套票' : '看系列賽'));
+  document.querySelector('section.tab[data-tab="info"]').prepend(mk());
+  document.querySelector('section.tab[data-tab="register"]').prepend(mk());
+}
+
+// 依出生日期（比賽當天所在學年）自動選組別
+let catAutoPicked = false;
+categorySelect.addEventListener('change', () => { catAutoPicked = false; });
+function autoPickCategory() {
+  const ref = refDate();
+  const grade = birthInput.value ? gradeOn(birthInput.value, ref) : null;
+  if (grade == null) return null;
+  const { match, count } = categoryForGrade(state.categories, grade,
+    (c) => categoryStatus(c, state.comp.registration_open).available);
+  if (match && (!categorySelect.value || catAutoPicked)) {
+    categorySelect.value = String(match.id);
+    catAutoPicked = true;
+  }
+  const label = `${rocYear(ref)} 學年度 ${gradeLabel(grade)}`;
+  if (match && catAutoPicked) return `${label}，已自動選「${match.name}」（跳級或晚讀可自行更改）`;
+  if (count > 1) return `${label}，有多個組別符合，請自行選擇`;
+  return state.categories.some((c) => c.grade_min != null || c.grade_max != null) ? label : null;
 }
 
 // ---------- 出生日期、家長同意書 ----------
@@ -127,9 +167,11 @@ function updateConsent() {
   const age = ageOn(birthInput.value, refDate());
   const minor = age != null && age < 18;
   const valid = age != null && age >= 0 && age <= 120;
+  const gradeNote = valid ? autoPickCategory() : null;
   $('age-hint').replaceChildren(...(!birthInput.value ? [] : !valid ? ['出生日期不正確'] : [
     state.comp?.event_date ? `比賽當天 ${age} 歲` : `${age} 歲`,
     minor ? el('strong', { style: 'color:var(--err)' }, '・未滿 18 歲，需家長同意書（請往下填寫）') : null,
+    gradeNote ? el('div', { class: 'grade-hint' }, gradeNote) : null,
   ].filter(Boolean)));
   $('consent-box').classList.toggle('hidden', !(minor && valid));
   if (minor && valid && !consentShown) {
@@ -144,6 +186,7 @@ $('sig-clear').addEventListener('click', () => sigPad.clear());
 
 function resetConsent() {
   consentShown = false;
+  catAutoPicked = false;
   $('g-name').value = '';
   $('g-rel').value = '';
   $('g-agree').checked = false;
@@ -244,7 +287,7 @@ function renderList() {
   $('list').replaceChildren(...rows.map((r, i) => el('li', {},
     el('span', { class: 'no' }, i + 1),
     el('div', { class: 'who' },
-      el('div', { class: 'name' }, r.display_name),
+      el('div', { class: 'name' }, r.display_name, r.is_package ? el('span', { class: 'pkg-badge' }, '套票') : null),
       el('div', { class: 'sub' }, [r.category_name, r.team].filter(Boolean).join('・'))),
     el('div', { class: 'end' }, r.payment_status === 'unpaid'
       ? el('button', { type: 'button', class: 'pay unpaid', onclick: () => openPayDialog(r) }, '未繳費 ✎')
@@ -255,74 +298,30 @@ function renderList() {
 $('search').addEventListener('input', (e) => { state.search = e.target.value; renderList(); });
 
 // ---------- 繳費資訊 ----------
-const dlg = $('pay-dialog');
-
-function openPayDialog(reg, fullName = '') {
-  state.payTarget = reg;
-  $('pay-form').reset();
-  $('pay-msg').className = 'msg';
-  $('pay-submit').disabled = false;
-  $('pay-who').replaceChildren('報名資料：', el('strong', {}, reg.display_name), `　${reg.category_name}`);
-  const instr = state.comp.payment_instructions.trim();
-  $('pay-instructions').textContent = instr ? `匯款方式：\n${instr}` : '';
-  $('pay-instructions').classList.toggle('hidden', !instr);
-  $('pay-name').value = fullName;
-  $('pay-amount').value = state.comp.fee ?? '';
-  const today = new Date();
-  const local = new Date(today.getTime() - today.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-  $('pay-date').value = local;
-  $('pay-date').max = local;
-  dlg.showModal();
-  if (!fullName) $('pay-name').focus();
-}
-
-$('pay-close').addEventListener('click', () => dlg.close());
-dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); }); // 點背景關閉
-
-$('pay-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const btn = $('pay-submit');
-  btn.disabled = true;
-  btn.textContent = '送出中…';
-  const reg = state.payTarget;
-  try {
-    let proofPath = null;
-    const file = $('pay-file').files[0];
-    if (file) {
-      btn.textContent = '上傳截圖中…';
-      const { blob, ext, type } = await prepareUpload(file);
-      proofPath = `${reg.id}/${crypto.randomUUID()}.${ext}`;
-      const { error } = await sb.storage.from(PROOF_BUCKET).upload(proofPath, blob, { contentType: type });
-      if (error) throw new Error(`截圖上傳失敗：${error.message}`);
-    }
-    check(await sb.rpc('submit_payment', {
-      p_registration_id: reg.id,
-      p_full_name: $('pay-name').value,
-      p_account_last5: $('pay-last5').value.trim(),
-      p_amount: Number($('pay-amount').value),
-      p_paid_on: $('pay-date').value,
-      p_note: $('pay-note').value,
-      p_proof_path: proofPath,
-    }));
-    dlg.close();
+const payDialog = createPayDialog({
+  onDone: async () => {
     $('reg-done').classList.add('hidden');
     $('reg-card').classList.remove('hidden');
     showTab('participants');
     await load();
-    alert(`已送出 ${reg.display_name} 的繳費資訊，工作人員確認後會改為「已繳費」。`);
-  } catch (err) {
-    showMsg($('pay-msg'), err.message, 'err');
-    btn.disabled = false;
-  } finally {
-    btn.textContent = '送出';
-  }
+  },
 });
+
+function openPayDialog(reg, fullName = '') {
+  const pkg = reg.is_package && state.series;
+  payDialog.open(reg, {
+    fullName,
+    amount: pkg ? state.series.package_fee : state.comp.fee,
+    instructions: (pkg && state.series.payment_instructions) || state.comp.payment_instructions,
+    label: pkg ? `${reg.category_name}・套票` : reg.category_name,
+  });
+}
 
 // ---------- 載入 ----------
 async function load() {
   if (!state.comp) {
     state.comp = check(await sb.from('competitions')
-      .select('id, slug, title, event_date, location, fee, payment_instructions, brochure, minor_consent, is_published, registration_open')
+      .select('id, slug, title, event_date, location, fee, payment_instructions, brochure, minor_consent, is_published, registration_open, series_id')
       .eq('slug', slug).maybeSingle());
     if (!state.comp) {
       $('comp-title').textContent = '';
@@ -330,6 +329,10 @@ async function load() {
       document.querySelectorAll('section.tab').forEach((s) => s.classList.add('hidden'));
       $('not-found').classList.remove('hidden');
       return false;
+    }
+    if (state.comp.series_id) {
+      state.series = (await sb.from('series').select(SERIES_FIELDS).eq('id', state.comp.series_id).maybeSingle()).data ?? null;
+      if (state.series) state.seriesComps = await loadSeriesComps(state.series.id).catch(() => []);
     }
   }
   const [categories, registrations] = await Promise.all([
@@ -340,6 +343,7 @@ async function load() {
   state.registrations = registrations;
   if (state.filter !== 'all' && !categories.some((c) => String(c.id) === state.filter)) state.filter = 'all';
   renderInfo();
+  renderSeriesBanner();
   renderCategorySelect();
   renderTabs();
   renderList();

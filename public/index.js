@@ -26,6 +26,18 @@ async function load() {
   )));
 }
 
+// 系列賽主視覺（有公開的系列賽才顯示）
+async function loadSeries() {
+  const list = check(await sb.from('series').select(SERIES_FIELDS).order('id', { ascending: false }));
+  const heroes = [];
+  for (const se of list) {
+    const comps = await loadSeriesComps(se.id);
+    if (comps.length) heroes.push(renderSeriesHero(se, comps));
+  }
+  $home('series-hero').replaceChildren(...heroes);
+}
+loadSeries().catch(() => { /* 系列賽載入失敗不影響比賽列表 */ });
+
 applySite().then((site) => {
   document.title = site.site_name;
   $home('home-title').textContent = site.home_title;

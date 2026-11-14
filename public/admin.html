@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="robots" content="noindex">
-  <meta name="theme-color" content="#d9480f">
+  <meta name="theme-color" content="#066D6A">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icon.svg">
   <title>比賽管理後台</title>
@@ -13,7 +13,7 @@
 <body class="admin">
   <header class="site">
     <div class="inner">
-      <a class="brand" href="/admin">🧗 <span data-site-name>攀岩比賽</span> · 後台</a>
+      <a class="brand" href="/admin"><span data-site-name>攀岩比賽</span> · 後台</a>
       <span class="muted" id="me-label"></span>
     </div>
   </header>
@@ -120,6 +120,11 @@
             <div><label for="c-date">比賽日期</label><input id="c-date" type="date"></div>
             <div><label for="c-location">地點</label><input id="c-location" maxlength="120"></div>
             <div><label for="c-fee">報名費（元）</label><input id="c-fee" type="number" inputmode="numeric" min="0" placeholder="空白 = 未定"></div>
+            <div>
+              <label for="c-series">所屬系列賽 <span class="hint">（在「更多」建立系列賽）</span></label>
+              <select id="c-series"><option value="">不屬於系列賽</option></select>
+            </div>
+            <div><label for="c-series-order">系列賽中的第幾站</label><input id="c-series-order" type="number" inputmode="numeric" min="0" placeholder="例：1"></div>
           </div>
           <div class="check-row" style="margin-top:12px">
             <label><input type="checkbox" id="c-published"> 公開（出現在比賽列表）</label>
@@ -154,6 +159,13 @@
               <div><label for="cat-name">新增組別</label><input id="cat-name" required maxlength="40" placeholder="組別名稱，例：男子初階組"></div>
               <div><label for="cat-desc">說明 <span class="hint">（選填）</span></label><input id="cat-desc" maxlength="200" placeholder="例：攀爬經驗一年以下"></div>
               <div><label for="cat-cap">人數上限 <span class="hint">（空白 = 不限）</span></label><input id="cat-cap" type="number" inputmode="numeric" min="1"></div>
+              <div>
+                <label>年級範圍 <span class="hint">（選填；前台會依出生日期自動選組別）</span></label>
+                <div class="grid" style="grid-template-columns:1fr 1fr">
+                  <select id="cat-gmin" aria-label="最低年級"></select>
+                  <select id="cat-gmax" aria-label="最高年級"></select>
+                </div>
+              </div>
             </div>
             <div class="actions"><button type="submit" class="small">＋ 新增組別</button></div>
           </form>
@@ -170,6 +182,47 @@
       <!-- ===== 帳號 ===== -->
       <section class="view hidden" data-view="account">
         <div class="section-title"><h2>網站與帳號</h2></div>
+        <div class="card" id="series-card">
+          <div class="section-title">
+            <h3 style="flex:1;margin:0">系列賽與套票</h3>
+            <button type="button" class="small" id="new-series-btn">＋ 新系列賽</button>
+          </div>
+          <p class="preview">系列賽把多場比賽串在一起（例如四站），可設定套票價。比賽要在「比賽設定」選擇所屬系列賽與第幾站。</p>
+          <div id="series-list"></div>
+          <form class="cat-edit hidden" id="series-form" style="border-style:dashed">
+            <h3 id="series-form-title">新系列賽</h3>
+            <div class="grid">
+              <div><label for="se-title">系列賽名稱</label><input id="se-title" required maxlength="80" placeholder="例：原岩攀岩系列賽"></div>
+              <div>
+                <label for="se-slug">網址代碼 <span class="hint">（英文小寫、數字、-）</span></label>
+                <input id="se-slug" required maxlength="50" pattern="[a-z0-9]([a-z0-9\-]*[a-z0-9])?" placeholder="例：origin-2026" autocapitalize="off">
+                <div class="field-hint" id="se-slug-hint"></div>
+              </div>
+              <div><label for="se-tagline">一句話介紹</label><input id="se-tagline" maxlength="200" placeholder="例：三場大亂鬥練兵，一場 IFSC 正式賽驗收"></div>
+              <div><label for="se-fee">套票價（元） <span class="hint">（空白 = 不賣套票）</span></label><input id="se-fee" type="number" inputmode="numeric" min="0"></div>
+            </div>
+            <div class="check-row" style="margin-top:12px">
+              <label><input type="checkbox" id="se-published"> 公開（出現在首頁主視覺）</label>
+              <label><input type="checkbox" id="se-open" checked> 開放購買套票</label>
+            </div>
+            <div style="margin-top:12px">
+              <label for="se-payment">套票匯款方式 <span class="hint">（空白 = 使用第一站的匯款方式）</span></label>
+              <textarea id="se-payment" maxlength="2000"></textarea>
+            </div>
+            <div style="margin-top:12px">
+              <label for="se-intro">系列賽說明 <span class="hint">（Markdown，顯示在系列賽頁）</span></label>
+              <textarea id="se-intro" class="tall" maxlength="20000"></textarea>
+            </div>
+            <div class="actions">
+              <button type="submit" id="se-save">儲存</button>
+              <button type="button" class="secondary" id="se-cancel">取消</button>
+              <span class="spacer"></span>
+              <button type="button" class="danger hidden" id="se-delete">刪除系列賽</button>
+            </div>
+          </form>
+          <div class="msg" id="series-msg"></div>
+        </div>
+
         <form class="card" id="site-form">
           <h3>網站設定</h3>
           <div class="form-stack">

@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>系列賽</title>
+  <meta name="theme-color" content="#066D6A">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icon.svg">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="site">
+    <div class="inner">
+      <a class="brand" href="/"><span data-site-name>攀岩比賽</span></a>
+      <nav id="series-nav" class="hidden">
+        <a href="#stations">賽程</a>
+        <a href="#fees">費用</a>
+        <a href="#register" class="active">報名</a>
+      </nav>
+    </div>
+  </header>
+
+  <div id="hero"></div>
+
+  <main>
+    <div class="msg" id="load-msg"></div>
+
+    <div id="content" class="hidden">
+      <section class="section" id="stations">
+        <div class="eyebrow">STATIONS</div>
+        <h2 class="big">賽程</h2>
+        <p class="lead">點各站可以看簡章、單場報名與參加名單。</p>
+        <div class="station-grid" id="station-grid"></div>
+      </section>
+
+      <section class="section hidden" id="groups">
+        <div class="eyebrow">DIVISIONS</div>
+        <h2 class="big">組別</h2>
+        <p class="lead" id="groups-lead"></p>
+        <div class="group-grid" id="group-grid"></div>
+      </section>
+
+      <section class="section" id="fees">
+        <div class="eyebrow">FEES</div>
+        <h2 class="big">報名費用</h2>
+        <div class="fee-grid" id="fee-grid"></div>
+      </section>
+
+      <section class="section hidden" id="intro-section">
+        <div class="eyebrow">ABOUT</div>
+        <h2 class="big">賽事說明</h2>
+        <div class="card" id="intro"></div>
+      </section>
+
+      <section class="section">
+        <div class="eyebrow">HOW TO</div>
+        <h2 class="big">報名四步驟</h2>
+        <ol class="steps">
+          <li><strong>選套票或場次</strong>四場套票，或從賽程點選想參加的單場。</li>
+          <li><strong>填選手資料</strong>填出生日期，系統依年級自動帶出組別。</li>
+          <li><strong>家長線上同意</strong>未滿 18 歲由家長閱讀同意書並手寫簽名。</li>
+          <li><strong>匯款、填繳費資訊</strong>工作人員確認後，名單上會顯示「已繳費」。</li>
+        </ol>
+      </section>
+
+      <!-- 套票報名 -->
+      <section class="section" id="register">
+        <div class="eyebrow">PACKAGE</div>
+        <h2 class="big">套票報名</h2>
+        <div class="card hidden" id="pkg-closed"></div>
+        <div class="card" id="pkg-card">
+          <p class="preview" style="margin-top:0">一次報名所有場次，公開名單上的姓名會自動匿名（王小明 → 王X明）。</p>
+          <form id="pkg-form" autocomplete="off">
+            <div class="grid">
+              <div>
+                <label for="name">選手姓名</label>
+                <input id="name" required maxlength="30" placeholder="請輸入真實姓名" autocomplete="name">
+                <div class="field-hint" id="preview"></div>
+              </div>
+              <div>
+                <label for="birth">出生日期</label>
+                <input id="birth" type="date" required min="1900-01-01">
+                <div class="field-hint" id="age-hint"></div>
+              </div>
+              <div>
+                <label for="team">學校／所屬隊伍 <span class="hint">（選填）</span></label>
+                <input id="team" maxlength="50" placeholder="例：XX 國小、原岩攀岩隊">
+              </div>
+            </div>
+
+            <h3 style="margin-top:20px">各場組別</h3>
+            <p class="preview" style="margin-top:-4px">填好出生日期後會自動選好；跳級、晚讀或分男女組時請自行確認。</p>
+            <div class="grid" id="pick-list"></div>
+
+            <div class="consent hidden" id="consent-box">
+              <h3>家長同意書 <span class="badge closed">未滿 18 歲必填</span></h3>
+              <p class="preview" style="margin-top:0">請家長（法定代理人）閱讀以下同意書，填寫資料並在框內簽名。這份簽名會用在套票的每一場。</p>
+              <div class="consent-text" id="consent-text"></div>
+              <div class="grid">
+                <div>
+                  <label for="g-name">家長（法定代理人）姓名</label>
+                  <input id="g-name" maxlength="30" autocomplete="off">
+                </div>
+                <div>
+                  <label for="g-rel">與參賽者的關係</label>
+                  <select id="g-rel">
+                    <option value="">請選擇</option>
+                    <option>父親</option><option>母親</option><option>法定監護人</option><option>其他</option>
+                  </select>
+                </div>
+              </div>
+              <label style="margin-top:14px">家長簽名</label>
+              <div class="sig-wrap">
+                <canvas id="sig-pad" aria-label="簽名欄"></canvas>
+                <span class="sig-hint" id="sig-hint">請用手指在這裡簽名</span>
+              </div>
+              <div class="actions" style="margin-top:8px">
+                <button type="button" class="small secondary" id="sig-clear">清除重簽</button>
+              </div>
+              <label class="agree">
+                <input type="checkbox" id="g-agree">
+                <span>我是參賽者的家長／法定代理人，已閱讀並同意上述同意書。</span>
+              </label>
+            </div>
+            <div class="actions">
+              <button type="submit" id="submit-btn" class="block"></button>
+            </div>
+            <div class="msg" id="form-msg" role="status"></div>
+          </form>
+        </div>
+
+        <div class="card success-card hidden" id="pkg-done">
+          <h2>套票報名成功！</h2>
+          <p id="pkg-done-text"></p>
+          <div class="notice pre-wrap hidden" id="pkg-done-pay" style="text-align:left"></div>
+          <div class="actions" style="flex-direction:column;align-items:stretch">
+            <button type="button" id="pay-now-btn">我已匯款，填寫繳費資訊</button>
+            <button type="button" class="ghost" id="again-btn">再報名一位</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="card placeholder hidden" id="not-found">
+      <h2>找不到這個系列賽</h2>
+      <p class="lead">網址可能有誤，或系列賽尚未公開。</p>
+      <a class="btn secondary" href="/">回到首頁</a>
+    </div>
+  </main>
+
+  <!-- 繳費資訊 -->
+  <dialog id="pay-dialog">
+    <form id="pay-form" class="dlg-body" autocomplete="off">
+      <div class="dlg-head">
+        <h2>填寫繳費資訊</h2>
+        <button type="button" class="close" id="pay-close" aria-label="關閉">×</button>
+      </div>
+      <div class="notice" id="pay-who"></div>
+      <div class="notice pre-wrap hidden" id="pay-instructions"></div>
+      <div class="form-stack">
+        <div>
+          <label for="pay-name">真實姓名 <span class="hint">（需與報名時相同）</span></label>
+          <input id="pay-name" required maxlength="30" autocomplete="name">
+        </div>
+        <div>
+          <label for="pay-last5">匯款帳號後五碼</label>
+          <input id="pay-last5" required inputmode="numeric" pattern="[0-9]{5}" maxlength="5" placeholder="12345" autocomplete="off">
+        </div>
+        <div class="grid" style="grid-template-columns:1fr 1fr">
+          <div>
+            <label for="pay-amount">金額</label>
+            <input id="pay-amount" type="number" inputmode="numeric" required min="1">
+          </div>
+          <div>
+            <label for="pay-date">匯款日期</label>
+            <input id="pay-date" type="date" required>
+          </div>
+        </div>
+        <div>
+          <label for="pay-file">匯款截圖 <span class="hint">（選填）</span></label>
+          <input id="pay-file" type="file" accept="image/*,application/pdf">
+        </div>
+        <div>
+          <label for="pay-note">備註 <span class="hint">（選填）</span></label>
+          <textarea id="pay-note" maxlength="500" rows="2" placeholder="例：與 王X明 一起匯款"></textarea>
+        </div>
+      </div>
+      <div class="msg" id="pay-msg"></div>
+      <div class="actions">
+        <button type="submit" id="pay-submit" class="block">送出</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked@18.0.14/lib/marked.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.4.16/dist/purify.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
+  <script src="/config.js"></script>
+  <script src="/common.js"></script>
+  <script src="/series.js"></script>
+</body>
+</html>
